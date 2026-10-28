@@ -1467,7 +1467,7 @@ function parseFile(raw){
     }
 
     var fn = {
-      id: 'f' + (seq++),
+      id: 'f' + (seq++) + '@' + raw.id, /* 必须带文件后缀：seq 是单文件内的，跨文件会撞 id 导致 symById/成员/连线全部错位 */
       fileId: raw.id,
       name: fnName, shortName: shortName, kind: kind,
       internal: isInternal,
@@ -1857,6 +1857,50 @@ function buildGeometry(model){
   model.viewH = vmaxH; /* 包围高度：全景取景时计入斜视角的垂直投影 */
   model.floorR = Math.max(56, vmaxR * 1.18);
 
+  /* 目录平面：每个目录一块彩色地面（含嵌套子目录的子面）。
+     俯视时“块/子面落在哪个色面内 = 属于该目录” */
+  var dirKeys = {}, dk;
+  for(i = 0; i < model.files.length; i++){
+    var dfd = model.files[i].dir || '';
+    var dparts = dfd ? dfd.split('/') : [];
+    var acc = '';
+    dirKeys[acc] = 1; /* 根 */
+    for(var pi2 = 0; pi2 < dparts.length; pi2++){
+      acc = acc ? acc + '/' + dparts[pi2] : dparts[pi2];
+      dirKeys[acc] = 1;
+    }
+  }
+  var planes = [];
+  for(dk in dirKeys){
+    if(!dirKeys.hasOwnProperty(dk)) continue;
+    if(dk === '') continue; /* 根不建面：包住一切没有辨识价值，标签也是重叠源 */
+    var bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9, cnt2 = 0, fi3;
+    for(fi3 = 0; fi3 < model.files.length; fi3++){
+      var tf3 = model.files[fi3];
+      var ind = dk === '' ? true : (tf3.dir === dk || tf3.dir.indexOf(dk + '/') === 0);
+      if(!ind) continue;
+      cnt2++;
+      if(tf3.x - tf3.half < bx0) bx0 = tf3.x - tf3.half;
+      if(tf3.x + tf3.half > bx1) bx1 = tf3.x + tf3.half;
+      if(tf3.z - tf3.half < bz0) bz0 = tf3.z - tf3.half;
+      if(tf3.z + tf3.half > bz1) bz1 = tf3.z + tf3.half;
+    }
+    if(!cnt2) continue;
+    var hsh = 0, hk;
+    for(hk = 0; hk < dk.length; hk++) hsh = (hsh * 31 + dk.charCodeAt(hk)) % 360;
+    planes.push({
+      dir: dk || '(root)',
+      key: dk, /* 匹配用原始 key（dir 是显示名，root 显示为 (root)） */
+      depth: dk ? dk.split('/').length : 0,
+      cx: (bx0 + bx1) / 2, cz: (bz0 + bz1) / 2,
+      hx: Math.max((bx1 - bx0) / 2 + 2.6, 3),
+      hz: Math.max((bz1 - bz0) / 2 + 2.6, 3),
+      hue: hsh
+    });
+  }
+  planes.sort(function(a, b){ return a.depth - b.depth; }); /* 父目录先画，子面叠在上面 */
+  model.dirPlanes = planes;
+
   for(var fi = 0; fi < model.files.length; fi++){
     f = model.files[fi];
     var topY = f.h;
@@ -1864,6 +1908,7 @@ function buildGeometry(model){
     var span = f.half * 1.55;
     var step = span / n;
     var ci2, mi;
+    var onBlock = {}; /* 已站在紫色方块上的成员函数，顶面方格只排自由函数 */
 
     for(ci2 = 0; ci2 < f.classes.length; ci2++){
       var cl = f.classes[ci2];
@@ -1885,9 +1930,10 @@ function buildGeometry(model){
         var tt = (mi + 0.5) / Math.max(members.length, 1);
         fnm.wx = cx - cw * 0.8 + tt * cw * 1.6;
         fnm.wz = cl.z;
-        fnm.wy0 = cl.y1;
-        fnm.wy1 = cl.y1 + 1.8 + Math.min(2.4, fnm.name.length * 0.12);
-        fnm.wr = 0.55;
+        fnm.wy0 = cl.y1; /* 站在紫色方块顶上 */
+        fnm.wy1 = cl.y1 + 2.0 + Math.min(7, (fnm.inCount || 0) * 0.9); /* 被调用越多越高 */
+        fnm.wr = 0.58;
+        onBlock[fnm.id] = 1;
       }
 
       cl.fieldSlots = [];
@@ -1902,10 +1948,11 @@ function buildGeometry(model){
       }
     }
 
-    /* 函数方形排列在顶面：外部函数先占外圈周边，内部函数填内圈；被调用越多柱体越高 */
-    var ordered = [], fni;
-    for(fni = 0; fni < f.functions.length; fni++){ if(!f.functions[fni].internal) ordered.push(f.functions[fni]); }
-    for(fni = 0; fni < f.functions.length; fni++){ if(f.functions[fni].internal) ordered.push(f.functions[fni]); }
+    /* 自由函数方形排列在顶面：外部函数先占外圈周边，内部函数填内圈；被调用越多柱体越高
+       （类成员已在上面站在紫色方块上，这里跳过） */
+    var ordered = [], fni, gfn;
+    for(fni = 0; fni < f.functions.length; fni++){ gfn = f.functions[fni]; if(!gfn.internal && !onBlock[gfn.id]) ordered.push(gfn); }
+    for(fni = 0; fni < f.functions.length; fni++){ gfn = f.functions[fni]; if(gfn.internal && !onBlock[gfn.id]) ordered.push(gfn); }
     var fnN = ordered.length;
     if(fnN){
       var fcols = Math.ceil(Math.sqrt(fnN));
@@ -2616,7 +2663,7 @@ function drawScene(now){
       var sel = state.selected && (state.selected.symId === e.from || state.selected.symId === e.to);
       var hov = state.hover && (state.hover.symId === e.from || state.hover.symId === e.to);
       var base = (sel || hov) ? C_VOLT : C_BLUE;
-      var alpha = state.selected ? (sel ? 0.72 : 0.14) : 0.32;
+      var alpha = state.selected ? (sel ? 0.42 : 0.07) : 0.16; /* 调用线整体调淡 */
       /* 入场动画结束后全部画满：避免大项目的后段调用线永远只有“头”没有“尾” */
       var stag = (reduced || pathT >= 1) ? 1 : clamp(pathT * 1.4 - i * 0.012, 0, 1);
       pushFilament(list, B, pa, pb, base, alpha, prisms, stag, sel || hov, i * 0.061);
@@ -2625,6 +2672,68 @@ function drawScene(now){
 
   list.sort(function(x, y){ return y.d - x.d; });
   for(i = 0; i < list.length; i++) list[i].draw();
+
+  /* 目录平面（最顶图层）：画在全部实体与连线之后，不被上方调用线遮挡。
+     平时压得很淡；悬停/选中某个块时只点亮其目录链（含祖先目录） */
+  if(state.filters.files && model.dirPlanes && model.dirPlanes.length){
+    var hlDirs = null;
+    var hid = (state.hover && state.hover.fileId) || (state.selected && state.selected.fileId);
+    if(hid){
+      for(var zi = 0; zi < model.files.length; zi++){
+        if(model.files[zi].id !== hid) continue;
+        var zf = model.files[zi], zacc = '', zq;
+        var zparts = zf.dir ? zf.dir.split('/') : [];
+        hlDirs = { '':1 };
+        for(zq = 0; zq < zparts.length; zq++){
+          zacc = zacc ? zacc + '/' + zparts[zq] : zparts[zq];
+          hlDirs[zacc] = 1;
+        }
+        break;
+      }
+    }
+    ctx.lineWidth = 1;
+    ctx.font = '500 10px "IBM Plex Mono", Consolas, monospace';
+    var dlabels = [];
+    for(i = 0; i < model.dirPlanes.length; i++){
+      var dp = model.dirPlanes[i];
+      /* 该目录（含子目录）下没有任何可见实体 → 整面不画 */
+      var anyVis = false, pf;
+      for(pf = 0; pf < model.files.length; pf++){
+        var ff2 = model.files[pf];
+        if(ff2._sizePx === 0) continue;
+        if(!fileVisibleByThreshold(ff2)) continue;
+        if(dp.key === '' || ff2.dir === dp.key || ff2.dir.indexOf(dp.key + '/') === 0){ anyVis = true; break; }
+      }
+      if(!anyVis) continue;
+      var on = !hlDirs || hlDirs[dp.dir];
+      var q1 = project({ x:dp.cx - dp.hx, y:0.04, z:dp.cz - dp.hz }, B);
+      var q2 = project({ x:dp.cx + dp.hx, y:0.04, z:dp.cz - dp.hz }, B);
+      var q3 = project({ x:dp.cx + dp.hx, y:0.04, z:dp.cz + dp.hz }, B);
+      var q4 = project({ x:dp.cx - dp.hx, y:0.04, z:dp.cz + dp.hz }, B);
+      ctx.beginPath();
+      ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y);
+      ctx.lineTo(q3.x, q3.y); ctx.lineTo(q4.x, q4.y);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + dp.hue + ',58%,52%,' + (on ? 0.13 : 0.03) + ')';
+      ctx.fill();
+      ctx.strokeStyle = 'hsla(' + dp.hue + ',58%,62%,' + (on ? 0.6 : 0.18) + ')';
+      ctx.stroke();
+      var lc2 = project({ x:dp.cx, y:0.04, z:dp.cz + dp.hz }, B);
+      dlabels.push({ x:lc2.x + 4, y:lc2.y - 4, t:dp.dir, a:(on ? 0.85 : 0.25), hue:dp.hue });
+    }
+    /* 目录标签去重叠：按屏幕 y 排序后贪心下推（与上一标签 x 区间相撞且过近才推） */
+    dlabels.sort(function(a, b){ return a.y - b.y; });
+    var lastY = -1e9, lastX0 = -1e9, lastX1 = -1e9;
+    for(i = 0; i < dlabels.length; i++){
+      var dl = dlabels[i];
+      var dw = ctx.measureText(dl.t).width;
+      var dy2 = dl.y;
+      if(dl.y - lastY < 13 && dl.x < lastX1 + 6 && dl.x + dw > lastX0 - 6){ dy2 = lastY + 13; }
+      lastY = dy2; lastX0 = dl.x; lastX1 = dl.x + dw;
+      ctx.fillStyle = 'hsla(' + dl.hue + ',55%,72%,' + dl.a + ')';
+      ctx.fillText(dl.t, dl.x, dy2);
+    }
+  }
 
   if(state.selected && state.selectStart > 0 && state.filters.files){
     var sf = null;
@@ -2924,7 +3033,7 @@ function renderChord(){
     return;
   }
 
-  var cx = 450, cy = 215, R = 165;
+  var cx = 450, cy = 295, R = 165; /* 画布加高：给上下方向的标签留出纵向拉开的空间 */
   var folded = state.foldLong;
   var maxName = folded ? 12 : 22;
   var pos = [], idx = {};
@@ -2934,7 +3043,7 @@ function renderChord(){
     idx[nodes[i].id] = i;
   }
 
-  var s = '<svg viewBox="0 0 900 430" width="100%" role="img" aria-label="函数调用关系">';
+  var s = '<svg viewBox="0 0 900 590" width="100%" role="img" aria-label="函数调用关系">';
   s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="#33414C" stroke-opacity="0.5"/>';
   for(i = 0; i < m.edges.length; i++){
     var ia = idx[m.edges[i].from], ib = idx[m.edges[i].to];
@@ -2948,11 +3057,21 @@ function renderChord(){
   }
   for(i = 0; i < pos.length; i++){
     var P = pos[i];
-    var right = Math.cos(P.a) > -0.2;
+    /* 标签沿半径整体外推；近垂直段（圆环上下）用居中锚点并多推出一段，
+       靠节点自身弧长的纵向间距错开，消除上下区域的横向叠字 */
+    var co = Math.cos(P.a), si = Math.sin(P.a);
+    /* 全部位移随 |cos| 连续过渡（赤道 1× → 顶/底 1.5×、外推12→20、dy 3→-6/+14），
+       避免锚点切换处的间距塌陷 */
+    var sm = Math.max(0, 1 - Math.abs(co) / 0.35);
+    var near = sm > 0.5;
+    var lr = R + 12 + sm * 8;
+    var ldy = 3 + sm * (si < 0 ? -9 : 11);
+    var lx2 = cx + co * lr, ly2 = cy + si * lr * (1 + 0.5 * sm);
+    var anchor = near ? 'middle' : (co >= 0 ? 'start' : 'end');
     var ncol = (P.fn.internal === undefined) ? '#859EB2' : (P.fn.internal ? '#5E8BD6' : '#CEED34');
     s += '<g style="--nc:' + ncol + '"><rect class="node" x="' + (P.x - 2.5).toFixed(1) + '" y="' + (P.y - 2.5).toFixed(1) + '" width="5" height="5"/>';
-    s += '<text class="nlabel" x="' + (P.x + (right ? 8 : -8)).toFixed(1) + '" y="' + (P.y + 3).toFixed(1) +
-      '" text-anchor="' + (right ? 'start' : 'end') + '"><title>' + esc(P.fn.name) + '</title>' +
+    s += '<text class="nlabel" x="' + lx2.toFixed(1) + '" y="' + (ly2 + ldy).toFixed(1) +
+      '" text-anchor="' + anchor + '"><title>' + esc(P.fn.name) + '</title>' +
       esc(clip(P.fn.shortName || P.fn.name, maxName)) + '</text></g>';
   }
   s += '</svg>';
@@ -3335,9 +3454,10 @@ function presetDist(pitch){
 
 /* 顶视 / 斜45° 全景预设：距离按包围球与安全区取景，并把渲染范围与细节开到“全部”，
    保证任何实体都不被裁剪或按细节层级优化掉 */
-function presetView(pitch, label){
+function presetView(pitch, label, yaw){
   var vc = (state.model && state.model.viewCenter) ? state.model.viewCenter : { x:0, y:9, z:0 };
   state.cam.pitch = pitch;
+  if(yaw !== undefined) state.cam.yaw = yaw; /* yaw=0 时俯视下正方块的边与屏幕边界平行 */
   state.cam.dist = presetDist(pitch);
   state.cam.tx = vc.x; state.cam.ty = vc.y; state.cam.tz = vc.z;
   state.cam.zoom = 1;
@@ -3461,7 +3581,7 @@ function bindUI(){
   });
 
   on($('#btn-reset-cam'), 'click', function(){ resetCamera(); flashStatus('已重置视角', 1000); });
-  on($('#btn-view-top'), 'click', function(){ safe('顶视图', function(){ presetView(1.5533, '顶视图'); }); }); /* 89°，避开正上方的万向节退化 */
+  on($('#btn-view-top'), 'click', function(){ safe('顶视图', function(){ presetView(1.5533, '顶视图', 0); }); }); /* 89° + yaw=0：方块边与屏幕边界平行 */
   on($('#btn-view-45'), 'click', function(){ safe('斜45°视图', function(){ presetView(Math.PI / 4, '斜 45° 视图'); }); });
   on($('#btn-toggle-pan'), 'click', function(){
     state.panMode = !state.panMode;
@@ -3734,9 +3854,11 @@ function closeModal(){
 
 /* ---------- 9. 导入真实项目 ---------- */
 function globToRegex(glob){
+  /* 顺序要点：先转义全部正则特殊字符（含花括号/圆括号），再展开已转义的 {a,b} → (a|b)，
+     最后把 * / ? 换成通配 —— 若先转义再按裸 { } 展开，生成的 ( ) 会是字面量，永远匹配不到 */
   var src = String(glob)
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\{([^}]+)\}/g, function(m0, p){ return '(' + p.split(',').join('|') + ')'; })
+    .replace(/\\\{([^}]+)\\\}/g, function(m0, p){ return '(' + p.split(',').join('|') + ')'; })
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.');
   return new RegExp('^' + src + '$', 'i');
