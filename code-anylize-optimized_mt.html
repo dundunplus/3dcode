@@ -1091,6 +1091,9 @@ int atlas_config_valid(const struct AtlasConfig *config);
 #define ATLAS_LIMIT_OK 0
 #define ATLAS_LIMIT_ERR (-1)
 
+/* 函数式宏：供 config.c 跨文件调用，参与调用线 */
+#define ATLAS_LIMIT_DEPTH_OK(depth) ((depth) <= ATLAS_LIMIT_DEPTH)
+
 int atlas_limit_check(int depth);
 
 #endif
@@ -1105,13 +1108,13 @@ static int atlas_depth_ok(int depth);
 static int atlas_filter_count(void);
 
 int atlas_config_load(struct AtlasConfig *config, const char *root) {
-    ATLAS_TRACE_BEGIN("config.load");
+    ATLAS_TRACE_BEGIN("config.load " ATLAS_STRINGIFY(ATLAS_VERSION_MAJOR));
     if (config == NULL || root == NULL) {
         ATLAS_TRACE_END();
         return ATLAS_LIMIT_ERR;
     }
     config->root = root;
-    config->max_file_bytes = ATLAS_LIMIT_SYMBOLS;
+    config->max_file_bytes = ATLAS_CLAMP(ATLAS_LIMIT_SYMBOLS, 64, ATLAS_LIMIT_SYMBOLS);
     config->follow_calls = 1;
     ATLAS_TRACE_END();
     return ATLAS_LIMIT_OK;
@@ -1124,16 +1127,26 @@ static int atlas_filter_count(void) {
 }
 
 int atlas_config_valid(const struct AtlasConfig *config) {
+    int ok;
+    ATLAS_TRACE_BEGIN("config.valid");
     if (config == NULL) {
+        ATLAS_TRACE_END();
         return 0;
     }
-    return atlas_depth_ok((int)ATLAS_MAX_DEPTH) && config->max_file_bytes > 0
+    ok = atlas_depth_ok((int)ATLAS_MAX_DEPTH) && config->max_file_bytes > 0
         && atlas_filter_count() > 0;
+    ATLAS_TRACE_END();
+    return ok;
 }
 
 static int atlas_depth_ok(int depth) {
+    static const int widths[] = { 1, 4, 8 };
     int bounded = ATLAS_CLAMP(depth, 0, ATLAS_LIMIT_DEPTH);
-    return bounded == depth;
+    return bounded == depth && ATLAS_LIMIT_DEPTH_OK(bounded) && ATLAS_ARRAY_LEN(widths) > 0;
+}
+
+int atlas_limit_check(int depth) {
+    return ATLAS_LIMIT_DEPTH_OK(depth) && atlas_depth_ok(depth);
 }
 </script>
 
@@ -1606,6 +1619,52 @@ function parseFile(raw){
     }
   }
 
+  /* ---- FFI 声明：extern "C" { ... } 块内无函数体的原型（C/C++ 头与 Rust extern 块） ----
+     识别为 kind='ffi' 的符号：外部链接、无函数体、不发起调用，但可作为调用目标 */
+  function mkDecl(nm, ln){
+    var dup, di;
+    for(di = 0; di < functions.length; di++){
+      if(functions[di].shortName === nm){ dup = true; break; }
+    }
+    if(dup) return null; /* 已有（带函数体的）定义时不重复登记 */
+    return {
+      id: 'f' + (seq++) + '@' + raw.id, fileId: raw.id,
+      name: nm, shortName: nm, kind: 'ffi', internal: false, owner: null,
+      line: ln, endLine: ln, bodyStart: -1, bodyEnd: -1,
+      calls: [], outCount: 0, inCount: 0, ffi: true
+    };
+  }
+  for(i = 0; i < n; i++){
+    if(!isId(i, 'extern')) continue;
+    if(i + 2 >= n || toks[i + 1].t !== 'str' || puncAt(i + 2) !== '{') continue; /* extern "C" { */
+    var xb = i + 2, xe = pair[xb];
+    if(xe < 0) continue;
+    if(raw.lang === 'rust'){
+      for(var xi = xb + 1; xi < xe; xi++){
+        if(!isId(xi, 'fn')) continue;
+        var xn = idAt(xi + 1);
+        if(!xn || KW[xn]) continue;
+        var dclR = mkDecl(xn, toks[xi].line);
+        if(dclR) functions.push(dclR);
+      }
+    } else {
+      for(var xp = xb + 1; xp < xe; xp++){
+        if(puncAt(xp) !== '(' || pair[xp] <= xp || pair[xp] >= xe) continue;
+        var xn2 = idAt(xp - 1);
+        if(!xn2 || KW[xn2] || CTRL[xn2]) continue;
+        /* 语句以 ; 收尾且不含 { / = 才是声明（定义走上面的函数体识别） */
+        var xq = pair[xp] + 1, ok2 = true;
+        while(xq < xe && puncAt(xq) !== ';'){
+          if(puncAt(xq) === '{' || puncAt(xq) === '='){ ok2 = false; break; }
+          xq++;
+        }
+        if(!ok2 || xq >= xe) continue;
+        var dclC = mkDecl(xn2, toks[xp - 1].line);
+        if(dclC) functions.push(dclC);
+      }
+    }
+  }
+
   /* ---- Rust use ---- */
   if(raw.lang === 'rust'){
     for(i = 0; i < n; i++){
@@ -1793,9 +1852,6 @@ function buildGeometry(model){
     if(f.half > maxHalf) maxHalf = f.half;
   }
 
-  var centers = {
-    systems:{ x:0, z:-26 }, interface:{ x:-30, z:16 }, tests:{ x:30, z:16 }
-  };
   var grouped = { systems:[], interface:[], tests:[] };
   for(i = 0; i < model.files.length; i++){
     f = model.files[i];
@@ -1804,7 +1860,23 @@ function buildGeometry(model){
   }
 
   var gridStep = Math.max(16, maxHalf * 2 + 10); /* 网格间距随最大块宽度走，避免互相穿插 */
-  var key;
+  /* 分组中心按各组实际占位推导并留间隙：固定象限坐标在块变大后会互相穿插
+     （曾出现 atlas_config.h 的块整个落进 inspector.rs 块内部） */
+  var ext = {}, key, gc, gr, maxX = 0;
+  for(key in grouped){
+    if(!grouped.hasOwnProperty(key) || !grouped[key].length){ ext[key] = null; continue; }
+    gc = Math.ceil(Math.sqrt(grouped[key].length));
+    gr = Math.ceil(grouped[key].length / gc);
+    ext[key] = { x: gc * gridStep, z: gr * gridStep };
+    if(ext[key].x > maxX) maxX = ext[key].x;
+  }
+  var gapC = 12;
+  var zSide = Math.max(ext.interface ? ext.interface.z : 0, ext.tests ? ext.tests.z : 0);
+  var centers = {
+    systems: { x:0, z: ext.systems ? -(ext.systems.z / 2 + zSide / 2 + gapC) : 0 },
+    interface: { x: ext.interface ? -(maxX / 2 + ext.interface.x / 2 + gapC) : 0, z:0 },
+    tests: { x: ext.tests ? (maxX / 2 + ext.tests.x / 2 + gapC) : 0, z:0 }
+  };
   for(key in grouped){
     if(!grouped.hasOwnProperty(key)) continue;
     var list = grouped[key];
@@ -3033,18 +3105,19 @@ function renderChord(){
     return;
   }
 
-  var cx = 450, cy = 295, R = 165; /* 画布加高：给上下方向的标签留出纵向拉开的空间 */
+  /* 椭圆布局：半宽 >> 半高 → 顶/底节点的横向间距被放大（平顶叠字的根因），
+     两侧纵向间距仍 ≥ 13px，标签总体更贴近节点 */
+  var cx = 450, cy = 295, RX = 340, RY = 185;
   var folded = state.foldLong;
   var maxName = folded ? 12 : 22;
   var pos = [], idx = {};
   for(i = 0; i < nodes.length; i++){
     var a = i / nodes.length * Math.PI * 2 - Math.PI / 2;
-    pos.push({ fn:nodes[i], x:cx + Math.cos(a) * R, y:cy + Math.sin(a) * R, a:a });
+    pos.push({ fn:nodes[i], x:cx + Math.cos(a) * RX, y:cy + Math.sin(a) * RY, a:a });
     idx[nodes[i].id] = i;
   }
 
-  var s = '<svg viewBox="0 0 900 590" width="100%" role="img" aria-label="函数调用关系">';
-  s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="#33414C" stroke-opacity="0.5"/>';
+  var s = '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + RX + '" ry="' + RY + '" fill="none" stroke="#33414C" stroke-opacity="0.5"/>';
   for(i = 0; i < m.edges.length; i++){
     var ia = idx[m.edges[i].from], ib = idx[m.edges[i].to];
     if(ia === undefined || ib === undefined) continue;
@@ -3055,27 +3128,40 @@ function renderChord(){
       ' ' + c2x.toFixed(1) + ' ' + c2y.toFixed(1) + ' ' + B.x.toFixed(1) + ' ' + B.y.toFixed(1) + '">' +
       '<title>' + esc(A.fn.name + ' → ' + B.fn.name) + '</title></path>';
   }
+  var labels = [];
   for(i = 0; i < pos.length; i++){
     var P = pos[i];
-    /* 标签沿半径整体外推；近垂直段（圆环上下）用居中锚点并多推出一段，
-       靠节点自身弧长的纵向间距错开，消除上下区域的横向叠字 */
+    /* 椭圆上的标签：沿单位方向小步外推即可，不再需要 1.5× 纵向拉伸 */
     var co = Math.cos(P.a), si = Math.sin(P.a);
-    /* 全部位移随 |cos| 连续过渡（赤道 1× → 顶/底 1.5×、外推12→20、dy 3→-6/+14），
-       避免锚点切换处的间距塌陷 */
     var sm = Math.max(0, 1 - Math.abs(co) / 0.35);
-    var near = sm > 0.5;
-    var lr = R + 12 + sm * 8;
-    var ldy = 3 + sm * (si < 0 ? -9 : 11);
-    var lx2 = cx + co * lr, ly2 = cy + si * lr * (1 + 0.5 * sm);
-    var anchor = near ? 'middle' : (co >= 0 ? 'start' : 'end');
+    var off = 10 + sm * 6;
+    var ldy = 3 + sm * (si < 0 ? -7 : 9);
+    var lx2 = P.x + co * off, ly2 = P.y + si * off + ldy;
+    var anchor = sm > 0.5 ? 'middle' : (co >= 0 ? 'start' : 'end');
     var ncol = (P.fn.internal === undefined) ? '#859EB2' : (P.fn.internal ? '#5E8BD6' : '#CEED34');
-    s += '<g style="--nc:' + ncol + '"><rect class="node" x="' + (P.x - 2.5).toFixed(1) + '" y="' + (P.y - 2.5).toFixed(1) + '" width="5" height="5"/>';
-    s += '<text class="nlabel" x="' + lx2.toFixed(1) + '" y="' + (ly2 + ldy).toFixed(1) +
-      '" text-anchor="' + anchor + '"><title>' + esc(P.fn.name) + '</title>' +
-      esc(clip(P.fn.shortName || P.fn.name, maxName)) + '</text></g>';
+    var ltxt = clip(P.fn.shortName || P.fn.name, maxName);
+    labels.push({ x:lx2, y:ly2, anchor:anchor, t:ltxt, w:ltxt.length * 5.4 + 6,
+      title:P.fn.name, ncol:ncol });
+    s += '<rect class="node" style="--nc:' + ncol + '" x="' + (P.x - 2.5).toFixed(1) +
+      '" y="' + (P.y - 2.5).toFixed(1) + '" width="5" height="5"/>';
   }
-  s += '</svg>';
-  el.innerHTML = s;
+  /* 标签防重叠：按 y 升序，x 区间相撞且行距 <13 时逐个下推（级联生效）——
+     圆环顶/底处 sin 变化平缓、纯几何排布必然叠字，这里做最后的屏幕空间兜底 */
+  labels.sort(function(a, b){ return a.y - b.y; });
+  var lastY = -1e9, lastX0 = -1e9, lastX1 = -1e9, maxLabelY = 0;
+  for(i = 0; i < labels.length; i++){
+    var L = labels[i];
+    var x0 = L.anchor === 'start' ? L.x : (L.anchor === 'end' ? L.x - L.w : L.x - L.w / 2);
+    var x1 = x0 + L.w;
+    if(L.y - lastY < 13 && x0 < lastX1 + 4 && x1 > lastX0 - 4){ L.y = lastY + 13; }
+    lastY = L.y; lastX0 = x0; lastX1 = x1;
+    if(lastY > maxLabelY) maxLabelY = lastY;
+    s += '<text class="nlabel" style="--nc:' + L.ncol + '" x="' + L.x.toFixed(1) + '" y="' + L.y.toFixed(1) +
+      '" text-anchor="' + L.anchor + '"><title>' + esc(L.title) + '</title>' + esc(L.t) + '</text>';
+  }
+  /* 画布高度跟随下推后的最远标签，避免被 viewBox 裁掉 */
+  var vh = Math.max(590, Math.ceil(maxLabelY) + 14);
+  el.innerHTML = '<svg viewBox="0 0 900 ' + vh + '" width="100%" role="img" aria-label="函数调用关系">' + s + '</svg>';
 }
 
 function renderPreproc(){
