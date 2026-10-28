@@ -201,6 +201,24 @@ tr.sel td .clamp{color:var(--volt)}
 .checks label:hover{border-color:var(--volt);color:var(--ink)}
 .checks input{accent-color:var(--volt)}
 .dropzone{border:1px dashed var(--line);padding:18px;text-align:center;color:var(--muted);transition:border-color .12s ease-out,background .12s ease-out}
+.src-list{max-height:136px;overflow-y:auto;border:1px solid var(--line);background:var(--canvas)}
+.src-item{display:flex;align-items:center;gap:8px;padding:6px 9px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px}
+.src-item:last-child{border-bottom:0}
+.src-item .k{color:var(--volt);flex:none;letter-spacing:.06em}
+.src-item .p{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-item .rm{width:20px;height:20px;flex:none;color:var(--faint);font-family:var(--mono);font-size:13px;line-height:1}
+.src-item .rm:hover{color:var(--vol)}
+.src-row{display:flex;gap:8px}
+.src-row input{flex:1;min-width:0;height:36px;border:1px solid var(--line);padding:0 10px;font-family:var(--mono);font-size:12px;background:var(--canvas);color:var(--ink)}
+.src-row input:focus{outline:none;border-color:var(--volt)}
+.src-row .btn-ghost{height:36px;flex:none}
+.excl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.excl-chips:empty{display:none}
+.dest-btn.on-src{border-color:var(--volt);color:var(--volt);background:rgba(18,61,58,.35)}
+.dest-btn.on-excl{border-color:var(--vol);color:var(--vol);background:rgba(84,56,18,.35)}
+.excl-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);padding:4px 8px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.excl-chip .rm{width:14px;height:14px;color:var(--faint);font-size:12px;line-height:1}
+.excl-chip .rm:hover{color:var(--vol)}
 .dropzone.over{border-color:var(--volt);background:rgba(18,61,58,.28);color:var(--ink)}
 .dropzone .micro{color:var(--muted)}
 .dropzone .mono{margin-top:6px;color:var(--faint);overflow-wrap:anywhere}
@@ -338,6 +356,12 @@ tr.sel td .clamp{color:var(--volt)}
         <button class="icon-btn" id="btn-reset-cam" type="button" title="重置视角" aria-label="重置视角">
           <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v5h5"/></svg>
         </button>
+        <button class="icon-btn" id="btn-view-top" type="button" title="顶视图（全景）" aria-label="顶视图">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17"/><rect x="9" y="9" width="6" height="6"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-view-45" type="button" title="斜 45° 视图（全景）" aria-label="斜45度视图">
+          <svg viewBox="0 0 24 24"><path d="M12 3l8.5 4.75v8.5L12 21l-8.5-4.75v-8.5z"/><path d="M12 12l8.5-4.25M12 12L3.5 7.75M12 12v9"/></svg>
+        </button>
         <button class="icon-btn on" id="btn-toggle-grid" type="button" title="切换网格" aria-label="切换网格">
           <svg viewBox="0 0 24 24"><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
         </button>
@@ -392,15 +416,11 @@ tr.sel td .clamp{color:var(--volt)}
     <div>
       <h3>Dependency / 依赖</h3>
       <svg class="mini-graph" viewBox="0 0 200 120" aria-label="分组依赖预览">
-        <path d="M40 34 L120 26" stroke="#33414C" fill="none" stroke-width="1"/>
-        <path d="M40 34 L46 92" stroke="#33414C" fill="none" stroke-width="1"/>
         <path d="M120 26 L152 88" stroke="#33414C" fill="none" stroke-width="1"/>
         <path d="M46 92 L152 88" stroke="#33414C" fill="none" stroke-width="1"/>
-        <rect x="33" y="27" width="14" height="14" fill="rgba(66,232,200,.18)" stroke="#42E8C8" stroke-width="1"/>
         <rect x="113" y="19" width="14" height="14" fill="rgba(168,139,255,.18)" stroke="#A88BFF" stroke-width="1"/>
         <rect x="39" y="85" width="14" height="14" fill="rgba(255,180,84,.18)" stroke="#FFB454" stroke-width="1"/>
         <rect x="145" y="81" width="14" height="14" fill="rgba(115,167,255,.18)" stroke="#73A7FF" stroke-width="1"/>
-        <text x="33" y="22" class="svg-label">CORE</text>
         <text x="113" y="14" class="svg-label">SYS</text>
         <text x="33" y="112" class="svg-label">IFACE</text>
         <text x="139" y="112" class="svg-label">TESTS</text>
@@ -430,6 +450,11 @@ tr.sel td .clamp{color:var(--volt)}
         <button class="chip on" type="button" data-filter="macros"><i></i><span>宏 / 预处理</span></button>
         <button class="chip on" type="button" data-filter="includes"><i></i><span>include</span></button>
       </div>
+      <div class="kv" style="margin-top:12px"><span>调用次数阈值</span>
+        <input id="opt-threshold" class="num-in" type="number" min="0" step="1" value="0"
+          title="调用次数低于阈值的函数 / 宏及其连线不显示；仅支持整数；文件块内无达标对象则整块隐藏；0 = 不过滤">
+      </div>
+      <div class="micro faint" id="threshold-note" style="margin-top:6px">加载后默认 = ⌊log4(总函数数)⌋</div>
     </div>
 
     <div>
@@ -528,7 +553,7 @@ tr.sel td .clamp{color:var(--volt)}
     </div>
     <div>
       <div class="sec-head"><div class="micro">03</div><h2>调用关系</h2><button class="btn sec-export" type="button" data-export="sec-calls">导出 PNG</button></div>
-      <p>细线只表示函数之间存在调用，不表示执行顺序。线条穿过结构，让调用路径成为可追踪的空间关系。</p>
+      <p>细线只表示函数与函数、函数与宏之间存在调用，不表示执行顺序。线条穿过结构，让调用路径成为可追踪的空间关系。</p>
       <p class="mono dim">共 <span data-b="relations">--</span> 条关系，均由语法扫描得到，未解析的调用不进入图谱。</p>
     </div>
   </div>
@@ -548,7 +573,7 @@ tr.sel td .clamp{color:var(--volt)}
     </div>
     <div>
       <div class="sec-head"><div class="micro">04</div><h2>预处理剖面</h2><button class="btn sec-export" type="button" data-export="sec-preproc">导出 PNG</button></div>
-      <p>宏定义按行号分布，虚线框表示条件编译的嵌套区间，方块表示 <code>#define</code> 的定义位置。函数宏标注参数个数。</p>
+      <p>宏定义按行号分布，虚线框表示条件编译的嵌套区间，方块表示 <code>#define</code> 的定义位置。右侧宏清单按被调用次数降序排列，函数宏标注参数个数。</p>
       <p class="mono dim">本项目共 <span data-b="macros">--</span> 个宏定义、<span data-b="conds">--</span> 个条件编译区间、<span data-b="includes">--</span> 条 include 依赖。</p>
     </div>
   </div>
@@ -636,17 +661,37 @@ tr.sel td .clamp{color:var(--volt)}
       </select>
     </label>
 
-    <div class="dropzone" id="dropzone">
-      <div class="micro">拖入项目文件夹到此处</div>
-      <div class="mono" id="drop-hint">支持递归读取整个目录，文件仅在本地解析</div>
+    <div class="field">
+      <span class="micro">源码清单 · 文件夹与文件可多次添加、混选（默认假设位于同一目录）</span>
+      <div class="src-list" id="src-list"><div class="src-item"><span class="p faint">尚未添加源码</span></div></div>
     </div>
 
-    <div class="progress micro" id="analysis-progress">等待选择目录</div>
+    <div class="field">
+      <span class="micro">排除 · 文件 / 文件夹名（命中文件夹则整棵跳过）</span>
+      <div class="src-row">
+        <input id="in-excl" placeholder="输入名称回车直接加入；或用右侧按钮切换「添加文件夹 / 文件」的目的地" spellcheck="false">
+        <button class="btn-ghost dest-btn on-src" id="btn-dest" type="button"
+          title="切换「添加文件夹 / 添加文件 / 拖入」写入的目标列表">添加至：源码清单</button>
+      </div>
+      <div class="excl-chips" id="excl-list"></div>
+    </div>
+
+    <label class="field">
+      <span class="micro">遍历深度 · 0 = 不限（相对所选文件夹）</span>
+      <input id="in-depth" type="number" min="0" max="16" step="1" value="0">
+    </label>
+
+    <div class="dropzone" id="dropzone">
+      <div class="micro">或拖入文件 / 文件夹（追加进清单）</div>
+      <div class="mono" id="drop-hint">递归读取整个目录，文件仅在本地解析</div>
+    </div>
+
+    <div class="progress micro" id="analysis-progress">等待添加源码</div>
 
     <div class="modal-actions">
       <button class="btn-primary" id="btn-analyze" type="button" disabled>开始分析</button>
-      <button class="btn-ghost" id="btn-pick" type="button">选择目录</button>
-      <button class="btn-ghost" id="btn-pick-file" type="button">选择文件</button>
+      <button class="btn-ghost" id="btn-pick" type="button">添加文件夹</button>
+      <button class="btn-ghost" id="btn-pick-file" type="button">添加文件</button>
       <button class="btn-ghost" id="btn-cancel" type="button">取消</button>
     </div>
 
@@ -664,6 +709,15 @@ tr.sel td .clamp{color:var(--volt)}
 
 use crate::interface::inspector::FileMetrics;
 use crate::systems::dependency_graph::DependencyGraph;
+
+/// 宏示例：宏定义与宏调用都会进入调用关系图。
+macro_rules! atlas_ensure {
+    ($cond:expr) => {
+        if !$cond {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "atlas: empty source tree"));
+        }
+    };
+}
 
 /// 分析开始前读取一次的输入参数。
 pub struct AtlasConfig {
@@ -705,6 +759,7 @@ impl Atlas {
     /// 读取 root 下的全部源文件并重建拓扑。
     pub fn load(&mut self, root: &str) -> std::io::Result<usize> {
         let paths = self.walk(root)?;
+        atlas_ensure!(!paths.is_empty());
         for path in paths {
             let metrics = FileMetrics::measure(&path, self.config.max_file_bytes);
             self.graph.add_edge(&metrics.path, &metrics.owner);
@@ -1047,6 +1102,7 @@ int atlas_limit_check(int depth);
 #include <string.h>
 
 static int atlas_depth_ok(int depth);
+static int atlas_filter_count(void);
 
 int atlas_config_load(struct AtlasConfig *config, const char *root) {
     ATLAS_TRACE_BEGIN("config.load");
@@ -1061,11 +1117,18 @@ int atlas_config_load(struct AtlasConfig *config, const char *root) {
     return ATLAS_LIMIT_OK;
 }
 
+/* 函数式宏调用示例：ATLAS_ARRAY_LEN / ATLAS_STRINGIFY 跨文件参与调用线 */
+static int atlas_filter_count(void) {
+    static const char *filters[] = { "all", "src", "notest" };
+    return (int)ATLAS_ARRAY_LEN(filters) + (int)ATLAS_STRINGIFY(ATLAS_VERSION_MAJOR)[0];
+}
+
 int atlas_config_valid(const struct AtlasConfig *config) {
     if (config == NULL) {
         return 0;
     }
-    return atlas_depth_ok((int)ATLAS_MAX_DEPTH) && config->max_file_bytes > 0;
+    return atlas_depth_ok((int)ATLAS_MAX_DEPTH) && config->max_file_bytes > 0
+        && atlas_filter_count() > 0;
 }
 
 static int atlas_depth_ok(int depth) {
@@ -1529,15 +1592,16 @@ function parseFile(raw){
     }
   }
 
-  /* ---- 调用（仅函数体内，跳过宏名） ---- */
-  var macroNames = {};
-  for(i = 0; i < macros.length; i++) macroNames[macros[i].name] = true;
+  /* ---- 调用（仅函数体内；宏名也作为调用目标参与连线；含 Rust name![..] 形式） ---- */
   for(k = 0; k < functions.length; k++){
     var f = functions[k];
     for(i = f.bodyStart + 1; i < f.bodyEnd; i++){
       var cv = idAt(i);
-      if(!cv || puncAt(i + 1) !== '(') continue;
-      if(KW[cv] || CTRL[cv] || macroNames[cv]) continue;
+      if(!cv) continue;
+      var n1 = puncAt(i + 1), n2 = puncAt(i + 2);
+      var isCall = (n1 === '(') || (n1 === '!' && (n2 === '(' || n2 === '[' || n2 === '{'));
+      if(!isCall) continue;
+      if(KW[cv] || CTRL[cv]) continue;
       f.calls.push({ name: cv, line: toks[i].line });
     }
   }
@@ -1569,12 +1633,17 @@ function parseFile(raw){
 }
 
 /* ---------- 3. 项目模型 ---------- */
-function clusterOf(path){
-  var p = String(path).toLowerCase();
-  if(/(^|\/)(test|tests|testing|benches|bench)(\/|$)/.test(p)) return 'tests';
-  if(/(interface|inspector|api|ui|render|view|cli|frontend)/.test(p)) return 'interface';
-  if(/(systems|system|driver|drivers|runtime|platform|io|net|storage)/.test(p)) return 'systems';
-  return 'core';
+/* 分组按函数链接性：仅内部函数 = 测试，仅外部 = 接口，内外混合 = 系统；
+   没有函数（纯宏 / 声明头文件）归入接口。不再有 core 分组。 */
+function clusterOfSymbols(f){
+  var hasInt = false, hasExt = false, i;
+  for(i = 0; i < f.functions.length; i++){
+    if(f.functions[i].internal) hasInt = true;
+    else hasExt = true;
+  }
+  if(hasInt && hasExt) return 'systems';
+  if(hasInt) return 'tests';
+  return 'interface';
 }
 
 function buildModel(rawFiles){
@@ -1582,7 +1651,7 @@ function buildModel(rawFiles){
   for(i = 0; i < rawFiles.length; i++){
     if(!rawFiles[i]) continue;
     f = parseFile(rawFiles[i]);
-    f.cluster = clusterOf(f.path);
+    f.cluster = clusterOfSymbols(f);
     files.push(f);
   }
   return resolveModel(files);
@@ -1601,14 +1670,20 @@ function resolveModel(files){
     for(var d = 0; d < f.conds.length; d++){ symById[f.conds[d].id] = f.conds[d]; }
   }
 
-  /* 调用解析 */
-  var byName = {};
+  /* 调用解析：先匹配函数，匹配不到再匹配宏（函数式宏 / macro_rules!） */
+  var byName = {}, macroByName = {};
   for(i = 0; i < files.length; i++){
     f = files[i];
     for(var e = 0; e < f.functions.length; e++){
       fn = f.functions[e];
       if(!byName[fn.shortName]) byName[fn.shortName] = [];
       byName[fn.shortName].push(fn);
+    }
+    for(var me = 0; me < f.macros.length; me++){
+      var mac = f.macros[me];
+      if(mac.kind === 'undef') continue;
+      if(!macroByName[mac.name]) macroByName[mac.name] = [];
+      macroByName[mac.name].push(mac);
     }
   }
   var edges = [], keys = {};
@@ -1618,6 +1693,7 @@ function resolveModel(files){
       fn = f.functions[g];
       for(var h = 0; h < fn.calls.length; h++){
         var cands = byName[fn.calls[h].name];
+        if(!cands || !cands.length) cands = macroByName[fn.calls[h].name];
         if(!cands || !cands.length) continue;
         var target = null, z;
         for(z = 0; z < cands.length; z++){
@@ -1633,7 +1709,8 @@ function resolveModel(files){
         if(keys[key]) continue;
         keys[key] = true;
         edges.push({ from: fn.id, to: target.id });
-        fn.outCount++; target.inCount++;
+        fn.outCount = (fn.outCount || 0) + 1;
+        target.inCount = (target.inCount || 0) + 1; /* 宏目标没有预置计数 */
       }
     }
   }
@@ -1685,28 +1762,48 @@ function resolveModel(files){
   };
 }
 
+/* 方形单元格按“由外向内”出序：外圈周边先排（外部函数占外圈） */
+function squareRingCells(cols, rows){
+  var out = [], top = 0, bottom = rows - 1, left = 0, right = cols - 1, c, r;
+  while(top <= bottom && left <= right){
+    for(c = left; c <= right; c++) out.push({ r:top, c:c });
+    top++;
+    for(r = top; r <= bottom; r++) out.push({ r:r, c:right });
+    right--;
+    if(top <= bottom){ for(c = right; c >= left; c--) out.push({ r:bottom, c:c }); bottom--; }
+    if(left <= right){ for(r = bottom; r >= top; r--) out.push({ r:r, c:left }); left++; }
+  }
+  return out;
+}
+
 function buildGeometry(model){
   var maxBytes = 1, i, f;
   for(i = 0; i < model.files.length; i++){ if(model.files[i].bytes > maxBytes) maxBytes = model.files[i].bytes; }
+  var maxHalf = 4;
   for(i = 0; i < model.files.length; i++){
     f = model.files[i];
     var v = f.bytes / maxBytes;
     f.vol = v;
-    f.half = 2.6 + 4.4 * Math.sqrt(v);
+    /* 块面积 ∝ 函数 + 成员函数个数（半边长 ∝ √数量），让函数有地方铺开 */
+    var cnt = f.functions.length;
+    for(var qc = 0; qc < f.classes.length; qc++){ cnt += f.classes[qc].members.length; }
+    f.symCnt = cnt;
+    f.half = 3 + 2.3 * Math.sqrt(Math.max(cnt, 1));
     f.h = 3 + 26 * v;
+    if(f.half > maxHalf) maxHalf = f.half;
   }
 
   var centers = {
-    core:{ x:-27, z:-21 }, systems:{ x:25, z:-17 },
-    interface:{ x:-21, z:23 }, tests:{ x:27, z:21 }
+    systems:{ x:0, z:-26 }, interface:{ x:-30, z:16 }, tests:{ x:30, z:16 }
   };
-  var grouped = { core:[], systems:[], interface:[], tests:[] };
+  var grouped = { systems:[], interface:[], tests:[] };
   for(i = 0; i < model.files.length; i++){
     f = model.files[i];
-    if(!grouped[f.cluster]) f.cluster = 'core';
+    if(!grouped[f.cluster]) f.cluster = 'interface';
     grouped[f.cluster].push(f);
   }
 
+  var gridStep = Math.max(16, maxHalf * 2 + 10); /* 网格间距随最大块宽度走，避免互相穿插 */
   var key;
   for(key in grouped){
     if(!grouped.hasOwnProperty(key)) continue;
@@ -1717,8 +1814,8 @@ function buildGeometry(model){
     for(i = 0; i < list.length; i++){
       f = list[i];
       var col = i % cols, row = Math.floor(i / cols);
-      f.x = centers[key].x + (col - (cols - 1) / 2) * 15;
-      f.z = centers[key].z + (row - (rows - 1) / 2) * 15;
+      f.x = centers[key].x + (col - (cols - 1) / 2) * gridStep;
+      f.z = centers[key].z + (row - (rows - 1) / 2) * gridStep;
       f.y0 = 0;
     }
   }
@@ -1731,6 +1828,10 @@ function buildGeometry(model){
       gsx += gl[gi].x * gw; gsz += gl[gi].z * gw; gsw += gw;
     }
     if(gsw > 0) centers[key] = { x: gsx / gsw, z: gsz / gsw };
+  }
+  /* 空分组不保留中心：地面标签与面板都不会为无文件的组画位置 */
+  for(key in grouped){
+    if(grouped.hasOwnProperty(key) && !grouped[key].length) delete centers[key];
   }
   model.clusterCenters = centers;
 
@@ -1753,6 +1854,7 @@ function buildGeometry(model){
   }
   model.viewCenter = { x: vcx, y: vmaxH * 0.45, z: vcz };
   model.viewRadius = vmaxR;
+  model.viewH = vmaxH; /* 包围高度：全景取景时计入斜视角的垂直投影 */
   model.floorR = Math.max(56, vmaxR * 1.18);
 
   for(var fi = 0; fi < model.files.length; fi++){
@@ -1800,37 +1902,59 @@ function buildGeometry(model){
       }
     }
 
-    var freeIdx = 0;
-    for(var pi = 0; pi < f.functions.length; pi++){
-      var fp = f.functions[pi];
-      if(fp.owner) continue;
-      fp.wx = f.x - f.half * 0.6 + (freeIdx % 3) * f.half * 0.6;
-      fp.wz = f.z + f.half * 0.62;
-      fp.wy0 = topY;
-      fp.wy1 = topY + 2.2 + Math.min(2.2, fp.name.length * 0.12);
-      fp.wr = 0.62;
-      freeIdx++;
+    /* 函数方形排列在顶面：外部函数先占外圈周边，内部函数填内圈；被调用越多柱体越高 */
+    var ordered = [], fni;
+    for(fni = 0; fni < f.functions.length; fni++){ if(!f.functions[fni].internal) ordered.push(f.functions[fni]); }
+    for(fni = 0; fni < f.functions.length; fni++){ if(f.functions[fni].internal) ordered.push(f.functions[fni]); }
+    var fnN = ordered.length;
+    if(fnN){
+      var fcols = Math.ceil(Math.sqrt(fnN));
+      var frows = Math.ceil(fnN / fcols);
+      var cells = squareRingCells(fcols, frows);
+      var fsx = (f.half * 1.7) / fcols;
+      var fsz = (f.half * 1.7) / frows;
+      for(var qj = 0; qj < fnN; qj++){
+        var cell = cells[qj];
+        var fp2 = ordered[qj];
+        fp2.wx = f.x + (cell.c - (fcols - 1) / 2) * fsx;
+        fp2.wz = f.z + (cell.r - (frows - 1) / 2) * fsz;
+        fp2.wy0 = topY;
+        fp2.wy1 = topY + 2.0 + Math.min(7, (fp2.inCount || 0) * 0.9);
+        fp2.wr = 0.58;
+      }
+      /* ponytail: 内圈单元格可能压到中部的类塔，密集项目可改为让内圈柱体抬升 */
     }
 
-    /* 预处理架：宏板 + 条件编译框 */
+    /* 宏板：文件块内部地面上的方形排列 */
     var mcount = f.macros.length;
-    for(mi = 0; mi < mcount; mi++){
-      var mcr = f.macros[mi];
-      var mt = (mi + 0.5) / Math.max(mcount, 1);
-      mcr.x = f.x - f.half * 0.88 + mt * f.half * 1.76;
-      mcr.z = f.z - f.half * 1.46;
-      mcr.y0 = topY;
-      mcr.y1 = topY + 0.42;
+    if(mcount){
+      var mcols = Math.ceil(Math.sqrt(mcount));
+      var mrows = Math.ceil(mcount / mcols);
+      var msx = (f.half * 1.5) / mcols;
+      var msz = (f.half * 1.5) / mrows;
+      for(mi = 0; mi < mcount; mi++){
+        var mcr = f.macros[mi];
+        var mcol = mi % mcols, mrow = Math.floor(mi / mcols);
+        mcr.x = f.x + (mcol - (mcols - 1) / 2) * msx;
+        mcr.z = f.z + (mrow - (mrows - 1) / 2) * msz;
+        mcr.y0 = 0;
+        mcr.y1 = 0.42;
+      }
     }
+
+    /* 条件编译框：块内部、宏板上方分排架起 */
     var dcount = f.conds.length;
-    for(mi = 0; mi < dcount; mi++){
-      var cdj = f.conds[mi];
-      cdj.x = f.x;
-      cdj.z = f.z - f.half * 1.46;
-      cdj.y0 = topY + 0.66;
-      cdj.y1 = topY + 0.66 + 0.36 + cdj.depth * 0.32;
-      cdj.hx = Math.max(0.7, f.half * 0.94 - cdj.depth * 0.24);
-      cdj.hz = f.half * 0.24;
+    if(dcount){
+      var dzStep = (f.half * 1.2) / dcount;
+      for(mi = 0; mi < dcount; mi++){
+        var cdj = f.conds[mi];
+        cdj.x = f.x;
+        cdj.z = f.z - f.half * 0.6 + (mi + 0.5) * dzStep;
+        cdj.y0 = 0.66;
+        cdj.y1 = 0.66 + 0.36 + cdj.depth * 0.32;
+        cdj.hx = Math.max(0.7, f.half * 0.94 - cdj.depth * 0.24);
+        cdj.hz = Math.max(0.35, Math.min(f.half * 0.24, dzStep * 0.4));
+      }
     }
   }
 }
@@ -1924,6 +2048,11 @@ var state = {
   flowT: 0,
   lod: { rangeMode:'auto', detail:'auto' },
   panMode: false,
+  srcFiles: [],     /* 源码清单：多次添加的文件夹/文件（假设位于同一目录） */
+  excludes: [],     /* 排除项：文件 / 文件夹名，命中文件夹则整棵跳过 */
+  maxDepth: 0,      /* 遍历深度，0 = 不限（相对所选文件夹） */
+  callThreshold: 0, /* 调用次数阈值：低于则隐藏实体与连线；0 = 不过滤 */
+  addDest: 'src',   /* 「添加文件夹/文件/拖入」的目的地：src = 源码清单，excl = 排除列表 */
   exportScale: 2,
   exportWidth: 2560,
   sceneStart: 0,
@@ -1945,6 +2074,15 @@ function resizeScene(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+/* 场景高度会随选中后的函数表行数变化；CSS 尺寸变了而画布 backing / W,H 未重建时，
+   绘制被浏览器拉伸、鼠标坐标仍在旧空间 → 光标相对实体整体偏移。逐帧比对，变化才重建 */
+function syncSceneSize(){
+  if(!sceneEl || !sceneCanvas) return;
+  var r = sceneEl.getBoundingClientRect();
+  var w = Math.round(r.width || 800), h = Math.round(r.height || 600);
+  if(w !== Math.round(W) || h !== Math.round(H)) resizeScene();
+}
+
 function sub(a, b){ return { x:a.x - b.x, y:a.y - b.y, z:a.z - b.z }; }
 function dot(a, b){ return a.x * b.x + a.y * b.y + a.z * b.z; }
 function cross(a, b){ return { x:a.y * b.z - a.z * b.y, y:a.z * b.x - a.x * b.z, z:a.x * b.y - a.y * b.x }; }
@@ -1952,16 +2090,18 @@ function norm(a){ var l = Math.sqrt(dot(a, a)) || 1; return { x:a.x / l, y:a.y /
 
 function camBasis(){
   var c = state.cam;
+  /* 缩放只推拉相机距离，焦距固定 → 透视关系不随缩放改变 */
+  var dist = c.dist / Math.max(c.zoom, 0.01);
   var eye = {
-    x: c.tx + c.dist * Math.cos(c.pitch) * Math.sin(c.yaw),
-    y: c.ty + c.dist * Math.sin(c.pitch),
-    z: c.tz + c.dist * Math.cos(c.pitch) * Math.cos(c.yaw)
+    x: c.tx + dist * Math.cos(c.pitch) * Math.sin(c.yaw),
+    y: c.ty + dist * Math.sin(c.pitch),
+    z: c.tz + dist * Math.cos(c.pitch) * Math.cos(c.yaw)
   };
   var fwd = norm(sub({ x:c.tx, y:c.ty, z:c.tz }, eye));
   var right = norm(cross(fwd, { x:0, y:1, z:0 }));
   return {
     eye: eye, fwd: fwd, right: right, up: cross(right, fwd),
-    focal: Math.min(W, H * 1.35) * 1.05 * c.zoom
+    focal: Math.min(W, H * 1.35) * 1.05
   };
 }
 function project(p, B){
@@ -1973,7 +2113,7 @@ function project(p, B){
 function panCamera(dx, dy){
   /* 平移：沿相机屏幕平面移动观察目标（抓取式手感） */
   var B = camBasis();
-  var scale = state.cam.dist / Math.max(B.focal, 1);
+  var scale = (state.cam.dist / Math.max(state.cam.zoom, 0.01)) / Math.max(B.focal, 1);
   var mx = -dx * scale, my = dy * scale;
   state.cam.tx += B.right.x * mx + B.up.x * my;
   state.cam.ty += B.right.y * mx + B.up.y * my;
@@ -2000,7 +2140,34 @@ function rgbStr(c){ return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
 var C_VOLT = [66, 232, 200], C_BLUE = [115, 167, 255], C_VIOLET = [168, 139, 255],
     C_AMBER = [255, 180, 84], C_MACRO = [133, 158, 178],
     C_FN_IN = [94, 139, 214], C_FN_OUT = [206, 237, 52];
-function fog(depth){ return clamp((depth - 55) / 160, 0, 1) * 0.45; }
+function fog(depth){
+  /* 雾化随场景包围半径缩放：大场景全景拉远后内容不会被雾整体抹掉 */
+  var R = (state.model && state.model.viewRadius) ? state.model.viewRadius : 52;
+  return clamp((depth - R * 1.1) / Math.max(R * 2.2, 1), 0, 1) * 0.45;
+}
+
+/* 调用线锚点：函数取圆柱顶，宏取宏板顶（宏也参与调用连线） */
+function symAnchor(s){
+  if(!s) return null;
+  if(s.wx !== undefined) return { x:s.wx, y:s.wy1, z:s.wz };
+  if(s.x !== undefined) return { x:s.x, y:s.y1, z:s.z };
+  return null;
+}
+
+/* 调用阈值过滤：调用次数 = 被调用 + 发起（宏只被调用） */
+function callCountOf(s){ return (s.inCount || 0) + (s.outCount || 0); }
+function passesThreshold(s){
+  if(!(state.callThreshold > 0)) return true;
+  return callCountOf(s) >= state.callThreshold;
+}
+/* 文件块是否有达标对象：没有则整块不显示，其 include 联系线也一并隐藏 */
+function fileVisibleByThreshold(f){
+  if(!(state.callThreshold > 0)) return true;
+  var i;
+  for(i = 0; i < f.functions.length; i++){ if(passesThreshold(f.functions[i])) return true; }
+  for(i = 0; i < f.macros.length; i++){ if(passesThreshold(f.macros[i])) return true; }
+  return false;
+}
 
 /* ---- 缩放级别编号 & 渲染范围（随缩放自动调整） ---- */
 function zoomLevel(){
@@ -2022,7 +2189,7 @@ function detailThresholds(){
   if(state.lod.detail === 'mid') return [0, 1e9, 1e9];
   if(state.lod.detail === 'all') return [0, 0, 0];
   var k = clamp(1.4 - zoomLevel() * 0.075, 0.35, 1.6);
-  return [30 * k, 22 * k, 38 * k];
+  return [30 * k, 22 * k, 24 * k];
 }
 function flowActive(){
   return state.flowOn && !state.exporting && !reduced;
@@ -2324,13 +2491,14 @@ function drawFloor(B){
 }
 
 function drawScene(now){
+  syncSceneSize();
   if(!state.model || !ctx || W < 2) return;
   var B = camBasis();
   ctx.clearRect(0, 0, W, H);
   drawFloor(B);
 
   var model = state.model, list = [], prisms = [];
-  var delays = { core:0, systems:90, interface:180, tests:270 };
+  var delays = { systems:0, interface:90, tests:180 };
   var i, j;
   var margin = rangeMarginPx();
   var TH = detailThresholds();
@@ -2340,6 +2508,10 @@ function drawScene(now){
     var t = reduced ? 1 : clamp((now - state.sceneStart - (delays[f.cluster] || 0)) / 900, 0, 1);
     var p = easeOut(t);
     f._p = p;
+
+    /* 调用阈值：块内没有任何达标的函数 / 宏 → 整个文件块不显示 */
+    if(!fileVisibleByThreshold(f)) continue;
+
     var h = Math.max(0.3, f.h * p);
     prisms.push({ x:f.x, z:f.z, half:f.half, h:h });
 
@@ -2388,6 +2560,7 @@ function drawScene(now){
       for(j = 0; j < f.functions.length; j++){
         var fn = f.functions[j];
         if(fn.wx === undefined) continue;
+        if(!passesThreshold(fn)) continue;
         pushCylinder(list, B, {
           cx:fn.wx, cz:fn.wz, cy0:fn.wy0 * p, cy1:fn.wy1 * p, r:fn.wr,
           color:fn.internal ? C_FN_IN : C_FN_OUT,
@@ -2399,6 +2572,7 @@ function drawScene(now){
     if(state.filters.macros && sizePx >= TH[2]){
       for(j = 0; j < f.macros.length; j++){
         var mc = f.macros[j];
+        if(!passesThreshold(mc)) continue;
         pushBox(list, B, {
           cx:mc.x, cz:mc.z, cy0:mc.y0 * p, cy1:mc.y1 * p, hx:0.72, hz:0.2,
           color:C_MACRO, fill:0.2, stroke:0.75, dim:dim, dashed:true
@@ -2424,6 +2598,8 @@ function drawScene(now){
         if(model.files[q].id === fe.to) FB = model.files[q];
       }
       if(!FA || !FB) continue;
+      /* 文件块被阈值隐藏 → 其 include 联系线同样不显示 */
+      if(!fileVisibleByThreshold(FA) || !fileVisibleByThreshold(FB)) continue;
       var fd = (state.selected && state.selected.fileId !== FA.id && state.selected.fileId !== FB.id) ? 0.4 : 1;
       pushLink(list, B, { x:FA.x, z:FA.z }, { x:FB.x, z:FB.z }, C_BLUE, 0.22 * fd, i * 0.13);
     }
@@ -2433,18 +2609,17 @@ function drawScene(now){
   if(state.filters.calls && state.showFilaments && pathT > 0){
     for(i = 0; i < model.edges.length; i++){
       var e = model.edges[i];
-      var A = model.symById[e.from], Bn = model.symById[e.to];
-      if(!A || !Bn || A.wx === undefined || Bn.wx === undefined) continue;
+      var sA = model.symById[e.from], sB = model.symById[e.to];
+      if(!sA || !sB || !passesThreshold(sA) || !passesThreshold(sB)) continue;
+      var pa = symAnchor(sA), pb = symAnchor(sB);
+      if(!pa || !pb) continue;
       var sel = state.selected && (state.selected.symId === e.from || state.selected.symId === e.to);
       var hov = state.hover && (state.hover.symId === e.from || state.hover.symId === e.to);
       var base = (sel || hov) ? C_VOLT : C_BLUE;
       var alpha = state.selected ? (sel ? 0.72 : 0.14) : 0.32;
       /* 入场动画结束后全部画满：避免大项目的后段调用线永远只有“头”没有“尾” */
       var stag = (reduced || pathT >= 1) ? 1 : clamp(pathT * 1.4 - i * 0.012, 0, 1);
-      pushFilament(list, B,
-        { x:A.wx, y:A.wy1, z:A.wz },
-        { x:Bn.wx, y:Bn.wy1, z:Bn.wz },
-        base, alpha, prisms, stag, sel || hov, i * 0.061);
+      pushFilament(list, B, pa, pb, base, alpha, prisms, stag, sel || hov, i * 0.061);
     }
   }
 
@@ -2479,7 +2654,7 @@ function drawScene(now){
     ctx.font = '500 11px "IBM Plex Mono", Consolas, monospace';
     /* 标签渲染范围随缩放级别编号变化：放大越多，显示越小的文件标签 */
     var labelMin = clamp(34 - zoomLevel() * 1.6, 6, 34);
-    var cname = { core:'CORE / 核心', systems:'SYSTEMS / 系统', interface:'INTERFACE / 接口', tests:'TESTS / 测试' };
+    var cname = { systems:'SYSTEMS / 系统（内外混合）', interface:'INTERFACE / 接口（仅外部）', tests:'TESTS / 测试（仅内部）' };
     for(var key in model.clusterCenters){
       if(!model.clusterCenters.hasOwnProperty(key)) continue;
       var cc = model.clusterCenters[key];
@@ -2490,6 +2665,7 @@ function drawScene(now){
     for(i = 0; i < model.files.length; i++){
       var ff = model.files[i];
       if(ff._sizePx < labelMin) continue;
+      if(!fileVisibleByThreshold(ff)) continue; /* 阈值隐藏的块不画标签 */
       var fp = project({ x:ff.x, y:0, z:ff.z + ff.half + 1.2 }, B);
       ctx.fillStyle = (state.selected && state.selected.fileId === ff.id) ? 'rgba(66,232,200,0.95)' : 'rgba(82,97,107,0.8)';
       ctx.fillText(clip(ff.name, 20), fp.x + 4, fp.y);
@@ -2540,10 +2716,11 @@ function renderClusters(){
   if(!el || !state.model) return;
   var m = state.model;
   var names = {
-    core:'core / 核心', systems:'systems / 系统',
-    interface:'interface / 接口', tests:'tests / 测试'
+    systems:'systems / 系统 · 内外混合',
+    interface:'interface / 接口 · 仅外部',
+    tests:'tests / 测试 · 仅内部'
   };
-  var colors = { core:'#42E8C8', systems:'#A88BFF', interface:'#FFB454', tests:'#73A7FF' };
+  var colors = { systems:'#A88BFF', interface:'#FFB454', tests:'#73A7FF' };
   var html = '', key;
   for(key in names){
     if(!names.hasOwnProperty(key)) continue;
@@ -2724,11 +2901,28 @@ function renderChord(){
   var m = state.model, i, j;
   var nodes = [];
   for(i = 0; i < m.files.length; i++){
-    for(j = 0; j < m.files[i].functions.length && nodes.length < 48; j++){
+    for(j = 0; j < m.files[i].functions.length && nodes.length < 40; j++){
+      if(!passesThreshold(m.files[i].functions[j])) continue;
       nodes.push(m.files[i].functions[j]);
     }
   }
-  if(!nodes.length){ el.innerHTML = '<div class="mono faint">该项目未识别到函数定义</div>'; return; }
+  /* 宏也参与调用关系：把连线上出现的宏补进节点表（共 48 个上限） */
+  if(nodes.length < 48){
+    var inEdge = {};
+    for(i = 0; i < m.edges.length; i++){ inEdge[m.edges[i].from] = 1; inEdge[m.edges[i].to] = 1; }
+    for(i = 0; i < m.files.length && nodes.length < 48; i++){
+      for(j = 0; j < m.files[i].macros.length && nodes.length < 48; j++){
+        var mcand = m.files[i].macros[j];
+        if(mcand.kind === 'undef' || !inEdge[mcand.id] || !passesThreshold(mcand)) continue;
+        nodes.push(mcand);
+      }
+    }
+  }
+  if(!nodes.length){
+    el.innerHTML = '<div class="mono faint">' +
+      (state.callThreshold > 0 ? '无达到调用次数阈值的函数 / 宏' : '该项目未识别到函数定义') + '</div>';
+    return;
+  }
 
   var cx = 450, cy = 215, R = 165;
   var folded = state.foldLong;
@@ -2755,11 +2949,11 @@ function renderChord(){
   for(i = 0; i < pos.length; i++){
     var P = pos[i];
     var right = Math.cos(P.a) > -0.2;
-    var ncol = P.fn.internal ? '#5E8BD6' : '#CEED34';
+    var ncol = (P.fn.internal === undefined) ? '#859EB2' : (P.fn.internal ? '#5E8BD6' : '#CEED34');
     s += '<g style="--nc:' + ncol + '"><rect class="node" x="' + (P.x - 2.5).toFixed(1) + '" y="' + (P.y - 2.5).toFixed(1) + '" width="5" height="5"/>';
     s += '<text class="nlabel" x="' + (P.x + (right ? 8 : -8)).toFixed(1) + '" y="' + (P.y + 3).toFixed(1) +
       '" text-anchor="' + (right ? 'start' : 'end') + '"><title>' + esc(P.fn.name) + '</title>' +
-      esc(clip(P.fn.shortName, maxName)) + '</text></g>';
+      esc(clip(P.fn.shortName || P.fn.name, maxName)) + '</text></g>';
   }
   s += '</svg>';
   el.innerHTML = s;
@@ -2816,26 +3010,32 @@ function renderPreproc(){
     s += '<rect x="' + (axX - 4) + '" y="' + (my - 3).toFixed(1) + '" width="8" height="6" fill="rgba(133,158,178,0.22)" stroke="#859EB2"/>';
   }
 
-  /* 宏清单 */
-  var lx = 470, ly = 60, rowH = 26, perRow = folded ? 30 : 22;
+  /* 宏清单：按被调用次数降序（同次数按行号），时间轴仍按行号分布 */
+  var mlist = best.macros.slice().sort(function(a, b){
+    return ((b.inCount || 0) - (a.inCount || 0)) || (a.line - b.line);
+  });
+  var lx = 470, ly = 60, rowH = 26;
   s += '<line x1="' + (lx - 16) + '" y1="44" x2="' + (lx - 16) + '" y2="' + botY + '" stroke="#33414C"/>';
   s += '<text x="' + lx + '" y="44" class="svg-label">NAME</text>';
-  s += '<text x="' + (lx + 300) + '" y="44" class="svg-label">KIND</text>';
-  s += '<text x="' + (lx + 392) + '" y="44" class="svg-label">ARGS</text>';
-  s += '<text x="' + (lx + 424) + '" y="44" class="svg-label">LINE</text>';
-  for(i = 0; i < Math.min(best.macros.length, 14); i++){
-    var mm = best.macros[i];
+  s += '<text x="' + (lx + 240) + '" y="44" class="svg-label">KIND</text>';
+  s += '<text x="' + (lx + 325) + '" y="44" class="svg-label">ARGS</text>';
+  s += '<text x="' + (lx + 368) + '" y="44" class="svg-label">CALLS</text>';
+  s += '<text x="' + (lx + 420) + '" y="44" class="svg-label">LINE</text>';
+  for(i = 0; i < Math.min(mlist.length, 14); i++){
+    var mm = mlist[i];
     var yy = ly + i * rowH;
     var kindTxt = mm.kind === 'function' ? 'function' : (mm.kind === 'undef' ? 'undef' : (mm.kind === 'rules' ? 'macro_rules' : 'object'));
     s += '<line x1="' + lx + '" y1="' + (yy + 8) + '" x2="' + (lx + 420) + '" y2="' + (yy + 8) + '" stroke="#33414C" stroke-opacity="0.6"/>';
-    s += '<text x="' + lx + '" y="' + yy + '" class="svg-label" fill="#F2F5F6"><title>' + esc(mm.name) + '</title>' +
-      esc(clip(mm.name, folded ? 38 : 46)) + '</text>';
-    s += '<text x="' + (lx + 300) + '" y="' + yy + '" class="svg-label">' + kindTxt + '</text>';
-    s += '<text x="' + (lx + 392) + '" y="' + yy + '" class="svg-label">' + (mm.kind === 'function' ? mm.params : '–') + '</text>';
-    s += '<text x="' + (lx + 424) + '" y="' + yy + '" class="svg-label">L' + mm.line + '</text>';
+    s += '<text x="' + lx + '" y="' + yy + '" class="svg-label" fill="#F2F5F6"><title>' + esc(mm.name + ' · 被调用 ' + (mm.inCount || 0)) + '</title>' +
+      esc(clip(mm.name, folded ? 28 : 34)) + '</text>';
+    s += '<text x="' + (lx + 240) + '" y="' + yy + '" class="svg-label">' + kindTxt + '</text>';
+    s += '<text x="' + (lx + 325) + '" y="' + yy + '" class="svg-label">' + (mm.kind === 'function' ? mm.params : '–') + '</text>';
+    s += '<text x="' + (lx + 368) + '" y="' + yy + '" class="svg-label"' +
+      ((mm.inCount || 0) > 0 ? ' fill="#42E8C8"' : '') + '>' + (mm.inCount || 0) + '</text>';
+    s += '<text x="' + (lx + 420) + '" y="' + yy + '" class="svg-label">L' + mm.line + '</text>';
   }
-  if(best.macros.length > 14){
-    s += '<text x="' + lx + '" y="' + (ly + 14 * rowH) + '" class="svg-label">+' + (best.macros.length - 14) + ' defines</text>';
+  if(mlist.length > 14){
+    s += '<text x="' + lx + '" y="' + (ly + 14 * rowH) + '" class="svg-label">+' + (mlist.length - 14) + ' defines</text>';
   }
 
   s += '</svg>';
@@ -2914,47 +3114,147 @@ function renderAll(){
 }
 
 /* ---------- 8. 交互 ---------- */
+/* 屏幕点到线段的距离 */
+function pointToSegDist(px, py, ax, ay, bx, by){
+  var dx = bx - ax, dy = by - ay;
+  var len2 = dx * dx + dy * dy;
+  var t = len2 > 0 ? clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1) : 0;
+  var qx = ax + dx * t, qy = ay + dy * t;
+  return Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+}
+
+/* 屏幕点是否在凸四边形内（任意绕向） */
+function pointInQuad(px, py, a, b, c, d){
+  function cr(o, p, q){ return (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x); }
+  var c1 = cr(a, b, { x:px, y:py }), c2 = cr(b, c, { x:px, y:py }),
+      c3 = cr(c, d, { x:px, y:py }), c4 = cr(d, a, { x:px, y:py });
+  var neg = (c1 < 0 || c2 < 0 || c3 < 0 || c4 < 0);
+  var pos = (c1 > 0 || c2 > 0 || c3 > 0 || c4 > 0);
+  return !(neg && pos);
+}
+/* 屏幕点是否落在棱柱的投影轮廓内（boxCorners 的 8 个投影点 → 6 个面） */
+function pointInPrism(px, py, p){
+  return pointInQuad(px, py, p[4], p[5], p[6], p[7]) ||          /* 顶面 */
+    pointInQuad(px, py, p[0], p[3], p[2], p[1]) ||               /* 底面 */
+    pointInQuad(px, py, p[0], p[1], p[5], p[4]) ||
+    pointInQuad(px, py, p[1], p[2], p[6], p[5]) ||
+    pointInQuad(px, py, p[2], p[3], p[7], p[6]) ||
+    pointInQuad(px, py, p[3], p[0], p[4], p[7]);
+}
+
 function hitTest(mx, my){
+  syncSceneSize(); /* 场景刚被表格撑高/压缩时，先对齐坐标空间再命中 */
   var m = state.model;
   if(!m) return null;
-  var B = camBasis(), best = null, bestScore = 1e9, i;
+  var B = camBasis(), i, j, d, pp;
+  var TH = detailThresholds();
+  var labelMin = clamp(34 - zoomLevel() * 1.6, 6, 34);
 
-  for(i = 0; i < m.files.length; i++){
-    var f = m.files[i];
-    var p = (f._p === undefined) ? 1 : f._p;
-    var h = Math.max(0.3, f.h * p);
-    var c = project({ x:f.x, y:h * 0.5, z:f.z }, B);
-    var halfW = Math.abs(project({ x:f.x + f.half, y:h * 0.5, z:f.z }, B).x - c.x);
-    var halfH = Math.abs(project({ x:f.x, y:h, z:f.z }, B).y - project({ x:f.x, y:0, z:f.z }, B).y) / 2 + 14;
-    var dx = Math.abs(mx - c.x), dy = Math.abs(my - c.y);
-    if(dx < Math.max(halfW, 22) && dy < Math.max(halfH, 22)){
-      var score = dx + dy * 0.5;
-      if(score < bestScore){ bestScore = score; best = { kind:'file', fileId:f.id, symId:null, file:f, cx:c.x, cy:c.y }; }
+  /* 可见性门槛：与 drawScene 完全一致（裁剪 / 阈值 / 过滤 / 细节层级 / 入场动画） */
+  function fileShown(f){
+    if(f._sizePx === 0) return false;            /* 渲染范围裁剪 */
+    if(!fileVisibleByThreshold(f)) return false;  /* 调用阈值隐藏 */
+    return true;
+  }
+  function symShown(f, kind){
+    if((f._p === undefined ? 1 : f._p) < 0.72) return false; /* 入场动画未完成 */
+    var sizePx = f._sizePx || 0;
+    if(kind === 'function') return state.filters.functions && sizePx >= TH[1];
+    if(kind === 'class') return state.filters.classes && sizePx >= TH[0];
+    return state.filters.macros && sizePx >= TH[2];
+  }
+
+  /* 1. 文件标签画在最上层：先按标签文本命中（测宽对齐绘制位置） */
+  if(state.showLabels){
+    ctx.font = '500 11px "IBM Plex Mono", Consolas, monospace';
+    for(i = 0; i < m.files.length; i++){
+      var lf = m.files[i];
+      if(!fileShown(lf)) continue;
+      if((lf._sizePx || 0) < labelMin) continue;
+      var lp = project({ x:lf.x, y:0, z:lf.z + lf.half + 1.2 }, B);
+      var txt = clip(lf.name, 20);
+      var tw = ctx.measureText(txt).width;
+      if(mx >= lp.x + 4 && mx <= lp.x + 4 + tw && my >= lp.y - 11 && my <= lp.y + 3){
+        return { kind:'file', fileId:lf.id, symId:null, file:lf, cx:lp.x, cy:lp.y };
+      }
     }
   }
-  if(!best) return null;
 
-  var fl = best.file, sym = null, symScore = 1e9, j, d, pp;
-  for(j = 0; j < fl.functions.length; j++){
-    var fn = fl.functions[j];
-    if(fn.wx === undefined) continue;
-    pp = project({ x:fn.wx, y:fn.wy1, z:fn.wz }, B);
-    d = Math.sqrt(Math.pow(mx - pp.x, 2) + Math.pow(my - pp.y, 2));
-    if(d < 18 && d < symScore){ symScore = d; sym = { kind:'function', fileId:fl.id, symId:fn.id, sym:fn, cx:pp.x, cy:pp.y }; }
+  /* 2. 符号：命中区覆盖实体的完整可视范围（柱体整段 / 类块与宏板的真实投影轮廓），
+        不再只盯顶点或中心小圆 —— 光标指哪选哪，无需往中心/柱顶偏移 */
+  var sym = null, symScore = 1e9, symZ = 1e9;
+  function trySym(kind, obj, dd, sx, sy, pz){
+    if(dd < symScore - 0.01 || (Math.abs(dd - symScore) <= 0.01 && pz < symZ)){
+      symScore = dd; symZ = pz;
+      sym = { kind:kind, fileId:obj.fileId, symId:obj.id, sym:obj, cx:sx, cy:sy };
+    }
   }
-  for(j = 0; j < fl.classes.length; j++){
-    var cl = fl.classes[j];
-    pp = project({ x:cl.x, y:(cl.y0 + cl.y1) / 2 * (fl._p || 1), z:cl.z }, B);
-    d = Math.sqrt(Math.pow(mx - pp.x, 2) + Math.pow(my - pp.y, 2));
-    if(d < 26 && d < symScore){ symScore = d; sym = { kind:'class', fileId:fl.id, symId:cl.id, sym:cl, cx:pp.x, cy:pp.y }; }
+  function projBox(o){
+    var cs = boxCorners(o), pr = [], kk;
+    for(kk = 0; kk < 8; kk++) pr.push(project(cs[kk], B));
+    return pr;
   }
-  for(j = 0; j < fl.macros.length; j++){
-    var mc = fl.macros[j];
-    pp = project({ x:mc.x, y:mc.y1, z:mc.z }, B);
-    d = Math.sqrt(Math.pow(mx - pp.x, 2) + Math.pow(my - pp.y, 2));
-    if(d < 14 && d < symScore){ symScore = d; sym = { kind:'macro', fileId:fl.id, symId:mc.id, sym:mc, cx:pp.x, cy:pp.y }; }
+  function ptDist(sx, sy){ return Math.sqrt(Math.pow(mx - sx, 2) + Math.pow(my - sy, 2)); }
+  for(i = 0; i < m.files.length; i++){
+    var f = m.files[i];
+    if(!fileShown(f)) continue;
+    var fp3 = (f._p === undefined) ? 1 : f._p;
+    if(symShown(f, 'function')){
+      for(j = 0; j < f.functions.length; j++){
+        var fn = f.functions[j];
+        if(fn.wx === undefined || !passesThreshold(fn)) continue;
+        var a0 = project({ x:fn.wx, y:fn.wy0 * fp3, z:fn.wz }, B);
+        var a1 = project({ x:fn.wx, y:fn.wy1 * fp3, z:fn.wz }, B);
+        var segd = pointToSegDist(mx, my, a0.x, a0.y, a1.x, a1.y);
+        var wrPx = Math.max(12, (fn.wr || 0.6) * B.focal / Math.max(a1.z, 1) + 6);
+        if(segd <= wrPx){
+          /* 柱体内 dd = 0，与类块/宏板同为“体内命中”时由深度决胜（与绘制遮挡一致） */
+          trySym('function', fn, Math.max(0, segd - wrPx), (a0.x + a1.x) / 2, (a0.y + a1.y) / 2, a1.z);
+        }
+      }
+    }
+    if(symShown(f, 'class')){
+      for(j = 0; j < f.classes.length; j++){
+        var cl = f.classes[j];
+        var cpr = projBox({ cx:cl.x, cz:cl.z, cy0:cl.y0 * fp3, cy1:cl.y1 * fp3,
+          hx:cl.hx || 1, hz:cl.hz || 1 });
+        var cct = project({ x:cl.x, y:(cl.y0 + cl.y1) / 2 * fp3, z:cl.z }, B);
+        var insideC = pointInPrism(mx, my, cpr);
+        var ddC = ptDist(cct.x, cct.y);
+        if(insideC || ddC < 26) trySym('class', cl, insideC ? 0 : ddC, cct.x, cct.y, cct.z);
+      }
+    }
+    if(symShown(f, 'macro')){
+      for(j = 0; j < f.macros.length; j++){
+        var mc = f.macros[j];
+        if(!passesThreshold(mc)) continue;
+        var mpr = projBox({ cx:mc.x, cz:mc.z, cy0:mc.y0 * fp3, cy1:mc.y1 * fp3, hx:0.72, hz:0.2 });
+        var mct = project({ x:mc.x, y:(mc.y0 + mc.y1) / 2 * fp3, z:mc.z }, B);
+        var insideM = pointInPrism(mx, my, mpr);
+        var ddM = ptDist(mct.x, mct.y);
+        if(insideM || ddM < 14) trySym('macro', mc, insideM ? 0 : ddM, mct.x, mct.y, mct.z);
+      }
+    }
   }
-  return sym || best;
+  if(sym) return sym;
+
+  /* 3. 文件块：按真实投影轮廓（6 面）判断，多个重叠时取离相机最近的 */
+  var best = null, bestZ = 1e9;
+  if(state.filters.files){
+    for(i = 0; i < m.files.length; i++){
+      var f2 = m.files[i];
+      if(!fileShown(f2)) continue;
+      var p2 = (f2._p === undefined) ? 1 : f2._p;
+      var h2 = Math.max(0.3, f2.h * p2);
+      var corners = boxCorners({ cx:f2.x, cz:f2.z, cy0:0, cy1:h2, hx:f2.half, hz:f2.half });
+      var pr = [], k;
+      for(k = 0; k < 8; k++) pr.push(project(corners[k], B));
+      if(!pointInPrism(mx, my, pr)) continue;
+      var cc = project({ x:f2.x, y:h2 * 0.5, z:f2.z }, B);
+      if(cc.z < bestZ){ bestZ = cc.z; best = { kind:'file', fileId:f2.id, symId:null, file:f2, cx:cc.x, cy:cc.y }; }
+    }
+  }
+  return best;
 }
 
 function showTooltip(hit){
@@ -3019,6 +3319,36 @@ function resetCamera(){
   state.vel.yaw = 0; state.vel.pitch = 0;
 }
 
+/* 全景取景距离：按包围球 + 焦距反推，内容落在视口安全区（85%）内；
+   投影中心在 0.56H，取下方较小余量参与计算 */
+function presetDist(pitch){
+  var m = state.model;
+  var R = (m && m.viewRadius) ? m.viewRadius : 52;
+  var Ht = (m && m.viewH) ? m.viewH : 10;
+  var rad = Math.sqrt(R * R + Ht * Ht); /* 包围球：xz 半径 + 高度，任意俯仰角都保守成立 */
+  var w = W || 1200, h = H || 750;
+  var focal = Math.min(w, h * 1.35) * 1.05;
+  var halfMin = Math.min(w / 2, h * 0.44);
+  var d = rad * focal / Math.max(halfMin * 0.85, 1);
+  return clamp(d, 42, 20000);
+}
+
+/* 顶视 / 斜45° 全景预设：距离按包围球与安全区取景，并把渲染范围与细节开到“全部”，
+   保证任何实体都不被裁剪或按细节层级优化掉 */
+function presetView(pitch, label){
+  var vc = (state.model && state.model.viewCenter) ? state.model.viewCenter : { x:0, y:9, z:0 };
+  state.cam.pitch = pitch;
+  state.cam.dist = presetDist(pitch);
+  state.cam.tx = vc.x; state.cam.ty = vc.y; state.cam.tz = vc.z;
+  state.cam.zoom = 1;
+  state.vel.yaw = 0; state.vel.pitch = 0;
+  state.lod.rangeMode = 'all';
+  state.lod.detail = 'all';
+  var r = $('#opt-range'); if(r) r.value = 'all';
+  var d = $('#opt-detail'); if(d) d.value = 'all';
+  flashStatus(label + ' · 全景（不裁剪）', 1400);
+}
+
 function restart(){
   state.sceneStart = nowMs();
   state.selected = null;
@@ -3074,7 +3404,7 @@ function bindUI(){
         panCamera(dx, dy);
       } else {
         state.cam.yaw -= dx * 0.0055;
-        state.cam.pitch = clamp(state.cam.pitch + dy * 0.0045, -0.12, 1.15);
+        state.cam.pitch = clamp(state.cam.pitch + dy * 0.0045, -0.12, 1.56);
         if(!reduced){ state.vel.yaw = -dx * 0.0055; state.vel.pitch = dy * 0.0045; state.inertiaStart = nowMs(); }
       }
       state.drag.x = e.clientX; state.drag.y = e.clientY;
@@ -3084,6 +3414,9 @@ function bindUI(){
     }
     var hit = hitTest(mx, my);
     state.hover = hit;
+    /* 提示框锚定光标而非实体中心：中心锚点的偏差 = 点击处到中心的距离，
+       随缩放（实体屏幕尺寸）与窗口（焦距）放大，表现为“光标比实体位置偏上” */
+    if(hit){ hit.cx = mx; hit.cy = my; }
     showTooltip(hit);
     sceneCanvas.style.cursor = hit ? 'pointer' : (state.panMode ? 'move' : 'grab');
   });
@@ -3128,6 +3461,8 @@ function bindUI(){
   });
 
   on($('#btn-reset-cam'), 'click', function(){ resetCamera(); flashStatus('已重置视角', 1000); });
+  on($('#btn-view-top'), 'click', function(){ safe('顶视图', function(){ presetView(1.5533, '顶视图'); }); }); /* 89°，避开正上方的万向节退化 */
+  on($('#btn-view-45'), 'click', function(){ safe('斜45°视图', function(){ presetView(Math.PI / 4, '斜 45° 视图'); }); });
   on($('#btn-toggle-pan'), 'click', function(){
     state.panMode = !state.panMode;
     this.className = 'icon-btn' + (state.panMode ? ' on' : '');
@@ -3191,6 +3526,14 @@ function bindUI(){
   on($('#opt-range'), 'change', function(){
     state.lod.rangeMode = this.value;
     flashStatus('渲染范围：' + this.options[this.selectedIndex].text, 1000);
+  });
+  on($('#opt-threshold'), 'change', function(){
+    var v = parseFloat(this.value);
+    state.callThreshold = (isFinite(v) && v > 0) ? Math.floor(v) : 0; /* 只支持整数 */
+    this.value = String(state.callThreshold);
+    flashStatus('调用阈值 ' + (state.callThreshold || '关闭'), 1000);
+    safe('调用关系', renderChord);
+    safe('符号表', renderFnTable);
   });
   on($('#opt-detail'), 'change', function(){
     state.lod.detail = this.value;
@@ -3295,6 +3638,54 @@ function bindUI(){
     this.value = '';
   });
 
+  /* ---- 源码清单 / 排除 / 遍历深度 ---- */
+  on($('#src-list'), 'click', function(e){
+    var t = e.target, idx = t && t.getAttribute ? t.getAttribute('data-src-i') : null;
+    if(idx === null || idx === undefined || idx === '') return;
+    state.srcFiles.splice(parseInt(idx, 10), 1);
+    renderSrcList();
+    updateAnalyzeState();
+  });
+  function addExclude(){
+    var input = $('#in-excl');
+    if(!input) return;
+    var v = String(input.value || '').replace(/^\s+|\s+$/g, '');
+    if(!v) return;
+    if(state.excludes.indexOf(v) < 0) state.excludes.push(v);
+    input.value = '';
+    renderExclList();
+    updateAnalyzeState();
+  }
+  /* 「添加」按钮 = 目的地转换标记：切换底部「添加文件夹 / 文件 / 拖入」写入清单还是排除列表 */
+  function updateDestBtn(){
+    var b = $('#btn-dest');
+    if(!b) return;
+    var excl = state.addDest === 'excl';
+    b.className = 'btn-ghost dest-btn ' + (excl ? 'on-excl' : 'on-src');
+    b.textContent = excl ? '添加至：排除列表' : '添加至：源码清单';
+  }
+  on($('#btn-dest'), 'click', function(){
+    state.addDest = (state.addDest === 'excl') ? 'src' : 'excl';
+    updateDestBtn();
+    flashStatus(state.addDest === 'excl' ? '添加目标：排除列表（选中的文件/文件夹将被排除）' : '添加目标：源码清单', 1600);
+  });
+  on($('#in-excl'), 'keydown', function(e){
+    if(e.key === 'Enter' || e.keyCode === 13){ if(e.preventDefault) e.preventDefault(); addExclude(); }
+  });
+  on($('#excl-list'), 'click', function(e){
+    var t = e.target, idx = t && t.getAttribute ? t.getAttribute('data-excl-i') : null;
+    if(idx === null || idx === undefined || idx === '') return;
+    state.excludes.splice(parseInt(idx, 10), 1);
+    renderExclList();
+    updateAnalyzeState();
+  });
+  on($('#in-depth'), 'change', function(){
+    var v = parseInt(this.value, 10);
+    state.maxDepth = isFinite(v) && v > 0 ? Math.min(v, 16) : 0;
+    this.value = state.maxDepth;
+    updateAnalyzeState();
+  });
+
   on($('#btn-analyze'), 'click', runImport);
   on($('#modal'), 'click', function(e){ if(e.target === this) closeModal(); });
 
@@ -3351,36 +3742,130 @@ function globToRegex(glob){
   return new RegExp('^' + src + '$', 'i');
 }
 
+/* 排除目的地：把选中的文件夹 / 文件按「条目名」加入排除列表 */
+function addPickedToExcludes(raw){
+  var seen = {}, i, added = 0;
+  for(i = 0; i < raw.length; i++){
+    var rel = raw[i].path || (raw[i].file && raw[i].file.name) || '';
+    rel = rel.replace(/\\/g, '/');
+    var segs = rel.split('/').filter(function(p){ return p.length > 0; });
+    if(!segs.length) continue;
+    var first = segs[0]; /* 文件夹取其名，散选文件取文件名 */
+    if(seen[first]) continue;
+    seen[first] = 1;
+    if(state.excludes.indexOf(first) < 0){ state.excludes.push(first); added++; }
+  }
+  renderExclList();
+  updateAnalyzeState();
+  setProgress(added ?
+    ('已加入排除 ' + added + ' 项 · 共 ' + state.excludes.length + ' 项') :
+    '这些条目已在排除列表中');
+}
+
+/* 把新选到的文件 / 文件夹追加进源码清单（多次添加、混选，假设位于同一目录）；
+   若目的地切换为「排除列表」，则改为写入排除项 */
 function acceptRaw(raw){
-  var out = [], i, firstRoot = '';
+  if(!raw || !raw.length){ setProgress('未读取到任何文件'); return; }
+  if(state.addDest === 'excl'){ addPickedToExcludes(raw); return; }
+  if(!state.srcFiles) state.srcFiles = [];
+  var seen = {}, i;
+  for(i = 0; i < state.srcFiles.length; i++) seen[state.srcFiles[i].path] = 1;
+  var firstRoot = '', added = 0;
   for(i = 0; i < raw.length; i++){
     var rel = raw[i].path || (raw[i].file && raw[i].file.name) || '';
     rel = rel.replace(/\\/g, '/');
     var parts = rel.split('/').filter(function(p){ return p.length > 0; });
-    if(parts.length > 1){
-      if(!firstRoot) firstRoot = parts[0];
-      parts = parts.slice(1);
-    }
     if(!parts.length) continue;
-    out.push({ file: raw[i].file, path: parts.join('/') });
+    var fromDir = rel.indexOf('/') >= 0;
+    if(fromDir && !firstRoot) firstRoot = parts[0];
+    if(seen[rel]) continue;
+    seen[rel] = 1;
+    state.srcFiles.push({
+      file: raw[i].file,
+      path: rel,
+      kind: fromDir ? 'dir' : 'file',
+      depth: fromDir ? Math.max(0, parts.length - 2) : 0
+    });
+    added++;
   }
-  if(!out.length){ setProgress('未读取到任何文件'); return; }
-  state.pending = out;
+  if(!added){ setProgress('清单中已有这些条目'); renderSrcList(); return; }
 
   var rootInput = $('#in-root');
-  if(rootInput && firstRoot) rootInput.value = './' + firstRoot;
+  if(rootInput && firstRoot && !rootInput.value) rootInput.value = './' + firstRoot;
 
-  var counts = { c:0, cpp:0, rust:0, other:0 };
-  for(i = 0; i < out.length; i++){
-    var lg = langOf(out[i].path.split('/').pop());
+  renderSrcList();
+  updateAnalyzeState();
+}
+
+/* 排除 / 深度过滤后生成本次分析的文件清单（去掉条目自身的名字一层） */
+function srcExcluded(path){
+  var segs = path.split('/'), i, j, ex;
+  for(i = 0; i < state.excludes.length; i++){
+    ex = state.excludes[i];
+    if(!ex) continue;
+    if(path === ex || path.indexOf(ex + '/') === 0) return true;
+    for(j = 0; j < segs.length; j++){ if(segs[j] === ex) return true; }
+  }
+  return false;
+}
+
+function collectPending(){
+  var out = [], srcs = state.srcFiles || [], i;
+  for(i = 0; i < srcs.length; i++){
+    var e = srcs[i];
+    if(srcExcluded(e.path)) continue;
+    if(state.maxDepth > 0 && e.depth > state.maxDepth) continue;
+    var parts = e.path.split('/').filter(function(p){ return p.length > 0; });
+    if(parts.length > 1) parts = parts.slice(1);
+    if(!parts.length) continue;
+    out.push({ file: e.file, path: parts.join('/') });
+  }
+  return out;
+}
+
+function renderSrcList(){
+  var el = $('#src-list');
+  if(!el) return;
+  var srcs = state.srcFiles || [], html = '', i;
+  if(!srcs.length){
+    el.innerHTML = '<div class="src-item"><span class="p faint">尚未添加源码</span></div>';
+    return;
+  }
+  for(i = 0; i < srcs.length; i++){
+    html += '<div class="src-item"><span class="k">' + (srcs[i].kind === 'dir' ? '目录' : '文件') +
+      '</span><span class="p" title="' + esc(srcs[i].path) + '">' + esc(srcs[i].path) +
+      '</span><button class="rm" type="button" data-src-i="' + i + '" title="移除" aria-label="移除">×</button></div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderExclList(){
+  var el = $('#excl-list');
+  if(!el) return;
+  var html = '', i;
+  for(i = 0; i < state.excludes.length; i++){
+    html += '<span class="excl-chip">' + esc(state.excludes[i]) +
+      '<button class="rm" type="button" data-excl-i="' + i + '" title="移除" aria-label="移除">×</button></span>';
+  }
+  el.innerHTML = html;
+}
+
+function updateAnalyzeState(){
+  var btn = $('#btn-analyze');
+  var n = state.srcFiles.length;
+  if(btn) btn.disabled = !n;
+  var live = collectPending();
+  var counts = { c:0, cpp:0, rust:0, other:0 }, i, lg;
+  for(i = 0; i < live.length; i++){
+    lg = langOf(live[i].path.split('/').pop());
     if(lg === 'c') counts.c++;
     else if(lg === 'cpp') counts.cpp++;
     else if(lg === 'rust') counts.rust++;
     else counts.other++;
   }
-  setProgress('已读取 ' + out.length + ' 个文件 · C ' + counts.c + ' / C++ ' + counts.cpp + ' / Rust ' + counts.rust);
-  var btn = $('#btn-analyze');
-  if(btn) btn.disabled = false;
+  setProgress('清单 ' + n + ' 项 · 生效 ' + live.length + ' 个源文件 · C ' + counts.c +
+    ' / C++ ' + counts.cpp + ' / Rust ' + counts.rust +
+    (live.length < n ? '（已排除 ' + (n - live.length) + '）' : ''));
 }
 
 function handleDrop(dt){
@@ -3481,8 +3966,9 @@ function readAll(list, done){
 }
 
 function runImport(){
+  state.pending = collectPending();
   var files = state.pending;
-  if(!files || !files.length){ setProgress('请先选择源码目录'); return; }
+  if(!files || !files.length){ setProgress('清单为空，或全部被排除 / 超出遍历深度'); return; }
 
   var langOn = {
     c: !$('#lang-c') || $('#lang-c').checked,
@@ -3554,7 +4040,7 @@ var PARSER_HANDLER_SRC = [
   '  for(k = 0; k < items.length; k++){',
   '    try {',
   '      f = parseFile(items[k].raw);',
-  '      f.cluster = clusterOf(f.path);',
+  '      f.cluster = clusterOfSymbols(f);',
   '      out.push({ i: items[k].i, f: f });',
   '    } catch(err){ out.push({ i: items[k].i, f: null }); }',
   '  }',
@@ -3621,7 +4107,7 @@ function parseParallel(raws, progress, done){
 /* ---- 并行分块渲染（导出高分辨率图片时使用） ---- */
 var EXPORT_FN_NAMES = [
   clamp, easeOut, clip, sub, dot, cross, norm, camBasis, project,
-  rgba, mixCanvas, volumeRGB, rgbStr, fog, boxCorners,
+  rgba, mixCanvas, volumeRGB, rgbStr, fog, boxCorners, symAnchor, callCountOf, passesThreshold, fileVisibleByThreshold,
   pushBox, pushWire, pushLink, pushCylinder, occluded, pushFilament,
   drawFloor, drawScene, zoomLevel, rangeMarginPx, detailThresholds, flowActive
 ];
@@ -3806,6 +4292,21 @@ function loadModel(raws, name, root, done){
       state.sceneStart = nowMs();
       state.selected = null;
       state.hover = null;
+      /* 默认阈值 = floor(log4(总函数数))：低于则隐藏实体与连线，可手动改 */
+      var defTh = 0;
+      if(model.totals.functions > 0){
+        defTh = Math.floor(Math.log(model.totals.functions) / Math.log(4));
+        if(defTh < 0) defTh = 0;
+      }
+      state.callThreshold = defTh;
+      var thIn = $('#opt-threshold');
+      if(thIn) thIn.value = defTh ? String(defTh) : '0';
+      var thNote = $('#threshold-note');
+      if(thNote){
+        thNote.textContent = defTh ?
+          ('默认 ⌊log4(' + model.totals.functions + ' 个函数)⌋ = ' + defTh + ' · 调用次数低于阈值则隐藏') :
+          '函数太少（<4），阈值默认关闭';
+      }
       resetCamera();
       renderAll();
       if(done) done(model);
@@ -3840,7 +4341,7 @@ function loop(now){
       (Math.abs(state.vel.yaw) > 0.00002 || Math.abs(state.vel.pitch) > 0.00002)){
       if(now - state.inertiaStart < 420){
         state.cam.yaw += state.vel.yaw;
-        state.cam.pitch = clamp(state.cam.pitch + state.vel.pitch, -0.12, 1.15);
+        state.cam.pitch = clamp(state.cam.pitch + state.vel.pitch, -0.12, 1.56);
         state.vel.yaw *= 0.90;
         state.vel.pitch *= 0.90;
       } else {
@@ -3862,9 +4363,10 @@ function loop(now){
     function fmt(v){ return (v < 0 ? '-' : '') + padLeft(Math.abs(v).toFixed(2), 6); }
     var coord = $('#coord-readout');
     if(coord){
-      coord.textContent = 'X ' + fmt(c.tx + c.dist * Math.cos(c.pitch) * Math.sin(c.yaw)) +
-        ' / Y ' + fmt(c.ty + c.dist * Math.sin(c.pitch)) +
-        ' / Z ' + fmt(c.tz + c.dist * Math.cos(c.pitch) * Math.cos(c.yaw));
+      var cdist = c.dist / Math.max(c.zoom, 0.01); /* 与 camBasis 一致：缩放只推拉距离 */
+      coord.textContent = 'X ' + fmt(c.tx + cdist * Math.cos(c.pitch) * Math.sin(c.yaw)) +
+        ' / Y ' + fmt(c.ty + cdist * Math.sin(c.pitch)) +
+        ' / Z ' + fmt(c.tz + cdist * Math.cos(c.pitch) * Math.cos(c.yaw));
     }
     var zlEl = $('#zoom-readout');
     if(zlEl){
