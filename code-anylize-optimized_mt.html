@@ -702,43 +702,36 @@ tr.sel td .clamp{color:var(--volt)}
 
 <!-- ================= 内置示例项目 atlas ================= -->
 <script type="text/plain" id="demo-core">
-//! Atlas 核心模型：把源码目录读成可导航的语法拓扑。
-//!
-//! 本模块只处理词法与语法层面的信息，不解释函数体的语义，
-//! 因此这里出现的所有度量都来自源码本身。
-
+//! Atlas 核心：目录遍历 → 文件度量 → 语法拓扑（仅保留功能演示所需）。
 use crate::interface::inspector::FileMetrics;
 use crate::systems::dependency_graph::DependencyGraph;
 
-/// 宏示例：宏定义与宏调用都会进入调用关系图。
+/// 宏示例：宏定义与宏调用都进入调用关系图。
 macro_rules! atlas_ensure {
     ($cond:expr) => {
         if !$cond {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "atlas: empty source tree"));
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "empty tree"));
         }
     };
 }
 
-/// 分析开始前读取一次的输入参数。
+/// FFI 示例：extern "C" 声明；带实现的调用直连 atlas_config.c 里的定义。
+extern "C" {
+    fn atlas_ffi_version() -> u32;
+    fn atlas_config_load(config: *mut u8, root: *const u8) -> i32;
+    fn atlas_limit_check(depth: i32) -> i32;
+}
+
 pub struct AtlasConfig {
-    /// 项目根目录。
     pub root: String,
-    /// 是否追踪函数之间的调用边。
     pub follow_calls: bool,
-    /// 单个源文件的字节上限。
     pub max_file_bytes: usize,
 }
 
-/// 所有可视化模型都要实现的最小读取接口。
 pub trait SourceModel {
-    /// 当前模型里的文件数量。
     fn file_count(&self) -> usize;
-
-    /// 按下标返回某个文件的语法度量。
-    fn metrics(&self, index: usize) -> Option<&FileMetrics>;
 }
 
-/// 项目级语法模型。
 pub struct Atlas {
     config: AtlasConfig,
     graph: DependencyGraph,
@@ -746,48 +739,41 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    /// 创建一个空模型。
     pub fn new(config: AtlasConfig) -> Self {
-        let graph = DependencyGraph::new(config.follow_calls);
+        unsafe { atlas_ffi_version() }; // FFI 调用点 1
+        unsafe { atlas_limit_check(8) }; // FFI → atlas_config.c
         Self {
+            graph: DependencyGraph::new(config.follow_calls),
             config,
-            graph,
             cache: Vec::new(),
         }
     }
 
-    /// 读取 root 下的全部源文件并重建拓扑。
     pub fn load(&mut self, root: &str) -> std::io::Result<usize> {
         let paths = self.walk(root)?;
         atlas_ensure!(!paths.is_empty());
+        unsafe { atlas_ffi_version() }; // FFI 调用点 2
+        unsafe { atlas_config_load(std::ptr::null_mut(), root.as_ptr()) }; // FFI → atlas_config.c
         for path in paths {
-            let metrics = FileMetrics::measure(&path, self.config.max_file_bytes);
-            self.graph.add_edge(&metrics.path, &metrics.owner);
-            self.cache.push(metrics);
+            let m = FileMetrics::measure(&path, self.config.max_file_bytes);
+            self.graph.add_edge(&m.path, &m.owner);
+            self.cache.push(m);
         }
         self.invalidate();
         Ok(self.cache.len())
     }
 
-    /// 按符号名查找它所在的文件。
-    pub fn resolve(&self, name: &str) -> Option<&FileMetrics> {
-        self.cache.iter().find(|m| m.contains(name))
-    }
-
-    /// 清空缓存，让下一次 load 重建全部数据。
     pub fn invalidate(&mut self) {
         self.graph.clear();
         self.cache.clear();
     }
 
-    /// 只收集根目录下扩展名为 rs / c / cc / cpp / h 的路径。
     fn walk(&self, root: &str) -> std::io::Result<Vec<String>> {
         let mut found = Vec::new();
         for entry in std::fs::read_dir(root)? {
             let path = entry?.path();
             if path.is_dir() {
-                let nested = path.display().to_string();
-                found.extend(self.walk(&nested)?);
+                found.extend(self.walk(&path.display().to_string())?);
             } else if is_source(&path.display().to_string()) {
                 found.push(path.display().to_string());
             }
@@ -800,27 +786,16 @@ impl SourceModel for Atlas {
     fn file_count(&self) -> usize {
         self.cache.len()
     }
-
-    fn metrics(&self, index: usize) -> Option<&FileMetrics> {
-        self.cache.get(index)
-    }
 }
 
-/// 按扩展名判断是否是本工具关心的源文件。
 fn is_source(path: &str) -> bool {
-    let lower = path.to_lowercase();
-    lower.ends_with(".rs")
-        || lower.ends_with(".c")
-        || lower.ends_with(".cc")
-        || lower.ends_with(".cpp")
-        || lower.ends_with(".h")
+    let p = path.to_lowercase();
+    p.ends_with(".rs") || p.ends_with(".c") || p.ends_with(".cpp") || p.ends_with(".h")
 }
 </script>
 
 <script type="text/plain" id="demo-graph">
-//! 调用关系图：节点是函数，边只表示语法上的调用，不带方向箭头。
-
-/// 用邻接表保存的调用关系。
+//! 调用关系图：邻接表保存，边只表示语法调用。
 pub struct DependencyGraph {
     follow_calls: bool,
     nodes: Vec<String>,
@@ -828,16 +803,10 @@ pub struct DependencyGraph {
 }
 
 impl DependencyGraph {
-    /// 创建一张空图。
     pub fn new(follow_calls: bool) -> Self {
-        Self {
-            follow_calls,
-            nodes: Vec::new(),
-            edges: Vec::new(),
-        }
+        Self { follow_calls, nodes: Vec::new(), edges: Vec::new() }
     }
 
-    /// 注册两个符号之间的调用关系。
     pub fn add_edge(&mut self, from: &str, to: &str) {
         if !self.follow_calls {
             return;
@@ -849,33 +818,14 @@ impl DependencyGraph {
         }
     }
 
-    /// 返回某个节点的邻居下标。
-    pub fn neighbors(&self, index: usize) -> Vec<usize> {
-        self.edges
-            .iter()
-            .filter(|(a, _)| *a == index)
-            .map(|(_, b)| *b)
-            .collect()
-    }
-
-    /// 清空全部节点与边。
     pub fn clear(&mut self) {
         self.nodes.clear();
         self.edges.clear();
     }
 
-    /// 导出为 (from, to) 列表，供观测面板使用。
-    pub fn export(&self) -> Vec<(String, String)> {
-        self.edges
-            .iter()
-            .map(|(a, b)| (self.nodes[*a].clone(), self.nodes[*b].clone()))
-            .collect()
-    }
-
-    /// 把符号名插入节点表并返回下标。
     fn intern(&mut self, name: &str) -> usize {
-        if let Some(index) = self.nodes.iter().position(|node| node == name) {
-            return index;
+        if let Some(i) = self.nodes.iter().position(|n| n == name) {
+            return i;
         }
         self.nodes.push(name.to_string());
         self.nodes.len() - 1
@@ -884,21 +834,14 @@ impl DependencyGraph {
 </script>
 
 <script type="text/plain" id="demo-inspector">
-//! 观测面板的数据源：文件度量、符号表与过滤条件。
-
-/// 单个符号的语法位置。
+//! 观测面板数据源：文件度量与选择状态。
 pub struct Symbol {
-    /// 符号名。
     pub name: String,
-    /// 类别：function / method / field。
     pub kind: String,
-    /// 起始行。
     pub start_line: usize,
-    /// 结束行。
     pub end_line: usize,
 }
 
-/// 单个源文件的语法度量。
 pub struct FileMetrics {
     pub path: String,
     pub owner: String,
@@ -907,7 +850,6 @@ pub struct FileMetrics {
     symbols: Vec<Symbol>,
 }
 
-/// 观测面板允许显示的类别。
 pub enum Filter {
     All,
     Classes,
@@ -915,7 +857,6 @@ pub enum Filter {
     Calls,
 }
 
-/// 观测面板的运行状态。
 pub struct Inspector {
     metrics: Vec<FileMetrics>,
     filter: Filter,
@@ -923,11 +864,10 @@ pub struct Inspector {
 }
 
 impl FileMetrics {
-    /// 读取文件并统计体积与符号。
     pub fn measure(path: &str, max_file_bytes: usize) -> Self {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         let bytes = text.len().min(max_file_bytes);
-        let loc = text.lines().filter(|line| !line.trim().is_empty()).count();
+        let loc = text.lines().filter(|l| !l.trim().is_empty()).count();
         Self {
             path: path.to_string(),
             owner: owner_of(path),
@@ -937,45 +877,22 @@ impl FileMetrics {
         }
     }
 
-    /// 判断某个符号名是否出现在本文件。
     pub fn contains(&self, name: &str) -> bool {
-        self.symbols.iter().any(|symbol| symbol.name == name)
-    }
-
-    /// 返回同名符号的语法位置。
-    pub fn symbol(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.iter().find(|symbol| symbol.name == name)
+        self.symbols.iter().any(|s| s.name == name)
     }
 }
 
 impl Inspector {
-    /// 选中一个文件，并返回它的度量。
     pub fn select_file(&mut self, index: usize) -> Option<&FileMetrics> {
         self.focus = Some(index);
         self.metrics.get(index)
     }
 
-    /// 切换当前显示的类别。
     pub fn set_filter(&mut self, filter: Filter) {
         self.filter = filter;
     }
-
-    /// 把焦点移动到某个符号上。
-    pub fn focus_symbol(&mut self, name: &str) -> bool {
-        self.metrics
-            .iter()
-            .position(|metrics| metrics.contains(name))
-            .map(|index| self.focus = Some(index))
-            .is_some()
-    }
-
-    /// 生成一条无箭头的调用连线描述。
-    pub fn render_call_line(&self, from: usize, to: usize) -> String {
-        format!("{} -> {}", from, to)
-    }
 }
 
-/// 用目录名推断文件属于哪个模块。
 fn owner_of(path: &str) -> String {
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() > 1 {
@@ -987,39 +904,19 @@ fn owner_of(path: &str) -> String {
 </script>
 
 <script type="text/plain" id="demo-tests">
-//! 端到端测试：验证体积统计、调用关系与过滤器行为。
-
-use atlas::core::Atlas;
-use atlas::core::AtlasConfig;
-use atlas::interface::inspector::Filter;
-use atlas::interface::inspector::Inspector;
-
-/// 调用图不允许出现自环。
-pub fn graph_has_no_cycles() {
-    let mut inspector = Inspector::new();
-    inspector.set_filter(Filter::Calls);
-    let metrics = inspector.select_file(0);
-    assert!(metrics.is_some());
+//! 端到端测试：全部无 pub → 仅内部函数 → tests 分组。
+fn clamp_depth(d: i32) -> i32 {
+    if d > 32 { 32 } else { d }
 }
 
-/// 文件体积必须与源文件字节数一致。
-pub fn volume_matches_source() {
-    let config = AtlasConfig {
-        root: String::from("./"),
-        follow_calls: true,
-        max_file_bytes: 1024 * 512,
-    };
-    let mut atlas = Atlas::new(config);
-    let count = atlas.load("./").unwrap_or(0);
-    assert_eq!(count, atlas.file_count());
+fn graph_has_no_cycles() {
+    let depth = clamp_depth(3);
+    assert_eq!(depth, 3);
 }
 
-/// 过滤器只影响显示，不影响分析结果。
-pub fn filter_is_display_only() {
-    let mut inspector = Inspector::new();
-    inspector.set_filter(Filter::Functions);
-    inspector.focus_symbol("load");
-    assert!(inspector.focus_symbol("resolve"));
+fn filter_is_display_only() {
+    let d = clamp_depth(8);
+    assert_eq!(d, 8);
 }
 </script>
 
@@ -1165,7 +1062,26 @@ int atlas_limit_check(int depth) {
 /* ---------- 0. 基础工具 ---------- */
 function $(sel){ return document.querySelector(sel); }
 function $all(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
-function on(el, ev, fn){ if(el && el.addEventListener){ el.addEventListener(ev, fn, false); } }
+/* 脏标记：任何事件都视为“有输入”，空闲帧可跳过重绘（报告 A1/方案2A） */
+var needRedraw = true, lastInput = 0;
+function invalidate(){ needRedraw = true; lastInput = nowMs(); }
+function needsFrame(now){
+  if(needRedraw) return true;
+  if(now - lastInput < 420) return true; /* 输入后的动画/回弹窗口 */
+  if(state.drag) return true;
+  if(Math.abs(state.vel.yaw) > 2e-5 || Math.abs(state.vel.pitch) > 2e-5) return true;
+  if(state.selectStart > 0 && now - state.selectStart < 420) return true;
+  if(state.model && now - state.sceneStart < 3200) return true; /* 入场动画 */
+  if(flowActive() && state.model && state.model.edges.length) return true;
+  return false;
+}
+function on(el, ev, fn){
+  if(!el || !el.addEventListener) return;
+  el.addEventListener(ev, function(){
+    invalidate();
+    if(fn) fn.apply(this, arguments);
+  }, false);
+}
 function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
 function easeOut(t){ return 1 - Math.pow(1 - t, 3); }
 
@@ -1755,8 +1671,20 @@ function resolveModel(files){
         if(!cands || !cands.length) cands = macroByName[fn.calls[h].name];
         if(!cands || !cands.length) continue;
         var target = null, z;
+        /* 优先选“有函数体的实现”：FFI 声明（bodyStart=-1）与 C 定义同名时，
+           调用边直连跨文件的真实实现（体现 FFI 调用 atlas_config.c） */
         for(z = 0; z < cands.length; z++){
-          if(cands[z].fileId === fn.fileId && cands[z].id !== fn.id){ target = cands[z]; break; }
+          if(cands[z].fileId === fn.fileId && cands[z].id !== fn.id && cands[z].bodyStart >= 0){ target = cands[z]; break; }
+        }
+        if(!target){
+          for(z = 0; z < cands.length; z++){
+            if(cands[z].id !== fn.id && cands[z].bodyStart >= 0){ target = cands[z]; break; }
+          }
+        }
+        if(!target){
+          for(z = 0; z < cands.length; z++){
+            if(cands[z].fileId === fn.fileId && cands[z].id !== fn.id){ target = cands[z]; break; }
+          }
         }
         if(!target){
           for(z = 0; z < cands.length; z++){
@@ -1814,8 +1742,11 @@ function resolveModel(files){
     }
   }
 
+  var fileById = {};
+  for(i = 0; i < files.length; i++) fileById[files[i].id] = files[i];
+
   return {
-    files:files, symById:symById,
+    files:files, symById:symById, fileById:fileById,
     edges:edges, fileEdges:fileEdges,
     totals:totals
   };
@@ -2194,8 +2125,18 @@ function resizeScene(){
 }
 
 /* 场景高度会随选中后的函数表行数变化；CSS 尺寸变了而画布 backing / W,H 未重建时，
-   绘制被浏览器拉伸、鼠标坐标仍在旧空间 → 光标相对实体整体偏移。逐帧比对，变化才重建 */
+   绘制被浏览器拉伸、鼠标坐标仍在旧空间 → 光标相对实体整体偏移。
+   有 ResizeObserver 时由它接管（不再每帧 getBoundingClientRect，报告 A9），否则逐帧比对 */
+var sceneRO = null;
+/* 文本宽度缓存：目录标签每帧 measureText 是 Canvas 最贵调用之一（报告 A8） */
+var twCache = {};
+function measureTw(t, font){
+  var k = font + '' + t, w = twCache[k];
+  if(w === undefined){ w = twCache[k] = ctx.measureText(t).width; }
+  return w;
+}
 function syncSceneSize(){
+  if(sceneRO) return;
   if(!sceneEl || !sceneCanvas) return;
   var r = sceneEl.getBoundingClientRect();
   var w = Math.round(r.width || 800), h = Math.round(r.height || 600);
@@ -2273,20 +2214,39 @@ function symAnchor(s){
   return null;
 }
 
-/* 调用阈值过滤：调用次数 = 被调用 + 发起（宏只被调用） */
+/* 调用阈值过滤：调用次数 = 被调用 + 发起（宏只被调用）。
+   可见性结果预计算打标（_vis/_cc），帧内 O(1) 读取 —— 原实现每帧
+   O(平面×文件×符号数) 的重复遍历是最大热点（性能报告 A5） */
 function callCountOf(s){ return (s.inCount || 0) + (s.outCount || 0); }
-function passesThreshold(s){
-  if(!(state.callThreshold > 0)) return true;
-  return callCountOf(s) >= state.callThreshold;
+var visDirty = true;
+function invalidateVis(){ visDirty = true; }
+function ensureVis(){
+  if(!visDirty) return;
+  visDirty = false;
+  var m = state.model;
+  if(!m) return;
+  var th = state.callThreshold, i, j, s, any;
+  for(i = 0; i < m.files.length; i++){
+    var f = m.files[i];
+    any = false;
+    for(j = 0; j < f.functions.length; j++){
+      s = f.functions[j];
+      s._cc = (s.inCount || 0) + (s.outCount || 0);
+      s._vis = (th <= 0) || (s._cc >= th);
+      if(s._vis) any = true;
+    }
+    for(j = 0; j < f.macros.length; j++){
+      s = f.macros[j];
+      s._cc = (s.inCount || 0) + (s.outCount || 0);
+      s._vis = (th <= 0) || (s._cc >= th);
+      if(s._vis) any = true;
+    }
+    f._vis = any;
+  }
 }
+function passesThreshold(s){ ensureVis(); return s._vis === true; }
 /* 文件块是否有达标对象：没有则整块不显示，其 include 联系线也一并隐藏 */
-function fileVisibleByThreshold(f){
-  if(!(state.callThreshold > 0)) return true;
-  var i;
-  for(i = 0; i < f.functions.length; i++){ if(passesThreshold(f.functions[i])) return true; }
-  for(i = 0; i < f.macros.length; i++){ if(passesThreshold(f.macros[i])) return true; }
-  return false;
-}
+function fileVisibleByThreshold(f){ ensureVis(); return f._vis === true; }
 
 /* ---- 缩放级别编号 & 渲染范围（随缩放自动调整） ---- */
 function zoomLevel(){
@@ -2491,10 +2451,16 @@ function pushCylinder(list, B, o){
   })(o);
 }
 
-function occluded(p, prisms, B){
-  var dp = dot(sub(p, B.eye), B.fwd), i, f;
-  for(i = 0; i < prisms.length; i++){
-    f = prisms[i];
+/* 遮挡查询走每帧构建的空间哈希（drawScene 里的 occGrid）：
+   原来每个贝塞尔采样线性扫全部棱柱 = O(边×24×文件数)，oneDNN 级项目 ~400ms/帧（报告 A6） */
+function occluded(p, grid, B){
+  var dp = dot(sub(p, B.eye), B.fwd);
+  var gx = Math.floor(p.x / 32); if(gx < -1000) gx = -1000; else if(gx > 1000) gx = 1000;
+  var gz = Math.floor(p.z / 32); if(gz < -1000) gz = -1000; else if(gz > 1000) gz = 1000;
+  var gl = grid[(gx + 1024) * 2048 + (gz + 1024)];
+  if(!gl) return false;
+  for(var i = 0; i < gl.length; i++){
+    var f = gl[i];
     if(Math.abs(p.x - f.x) > f.half || Math.abs(p.z - f.z) > f.half) continue;
     if(p.y < 0 || p.y > f.h) continue;
     if(dot(sub({ x:f.x, y:f.h * 0.5, z:f.z }, B.eye), B.fwd) < dp) return true;
@@ -2502,7 +2468,7 @@ function occluded(p, prisms, B){
   return false;
 }
 
-function pushFilament(list, B, a, b, color, alpha, prisms, progress, glow, phase){
+function pushFilament(list, B, a, b, color, alpha, occGrid, progress, glow, phase){
   var dx = b.x - a.x, dz = b.z - a.z;
   var lift = Math.max(6, Math.sqrt(dx * dx + dz * dz) * 0.13);
   var c0 = { x:a.x + dx * 0.25, y:a.y + lift, z:a.z + dz * 0.25 };
@@ -2515,45 +2481,57 @@ function pushFilament(list, B, a, b, color, alpha, prisms, progress, glow, phase
       z: u * u * u * a.z + 3 * u * u * t * c0.z + 3 * u * t * t * c1.z + t * t * t * b.z
     };
   }
-  var N = state.density < 1 ? 12 : 24;
+  var N = state.density < 1 ? 10 : 16; /* 采样数：遮挡渐变 16 段已平滑 */
   var flow = flowActive();
-  var prev = project(bez(0), B), i;
+  /* 相同遮挡状态的连续采样合并为一条 path：stroke 调用从每边 ~16 次降到 1~3 次，
+     浏览器栅格成本随之骤降（节点桩测不出这部分） */
+  var runs = [], cur = null, prev = project(bez(0), B), i;
   for(i = 1; i <= N; i++){
     var t = i / N;
     if(progress < t) break;
     var q = project(bez(t), B);
-    var occ = occluded(bez((i - 0.5) / N), prisms, B);
-    var d = (prev.z + q.z) / 2;
-    var col = mixCanvas(color, fog(d) * 0.8);
-    var a1 = occ ? alpha * 0.18 : Math.min(alpha * (glow ? 1.35 : 1), 1);
-    (function(from, to, col, a1, occ, glow, d){
+    var occ = occluded(bez((i - 0.5) / N), occGrid, B);
+    if(!cur || cur.occ !== occ){
+      cur = { occ:occ, pts:[prev, q] };
+      runs.push(cur);
+    } else {
+      cur.pts.push(q);
+    }
+    prev = q;
+  }
+  for(i = 0; i < runs.length; i++){
+    var run = runs[i];
+    var rEnd = run.pts[run.pts.length - 1];
+    var rCol = mixCanvas(color, fog(rEnd.z) * 0.8);
+    var rA = run.occ ? alpha * 0.18 : Math.min(alpha * (glow ? 1.35 : 1), 1);
+    (function(pts, rCol, rA, occ, glow, d){
       list.push({
         d: d,
         draw: function(){
           ctx.beginPath();
-          ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for(var s = 1; s < pts.length; s++) ctx.lineTo(pts[s].x, pts[s].y);
           ctx.lineWidth = glow ? 2 : 1;
-          ctx.strokeStyle = rgba(col, a1);
+          ctx.strokeStyle = rgba(rCol, rA);
           if(occ) ctx.setLineDash([2, 4]);
           ctx.stroke();
           if(occ) ctx.setLineDash([]);
         }
       });
-    })(prev, q, col, a1, occ, glow, d);
-    prev = q;
+    })(run.pts, rCol, rA, run.occ, glow, rEnd.z);
   }
 
   /* ---- 流动光点：沿调用线行进的亮脉冲；保存图片时自动关闭，导出静态线 ---- */
   if(flow && progress > 0.05){
     var u0 = ((state.flowT * 0.14 + (phase || 0)) % 1 + 1) % 1;
     var step = 0.02;
-    for(var pj = 0; pj < 5; pj++){
+    for(var pj = 0; pj < 4; pj++){
       var t1 = u0 - pj * step;
       if(t1 <= 0.02) break;
       if(t1 > progress) continue;
       var t0 = t1 - step;
       var q0 = project(bez(t0), B), q1 = project(bez(t1), B);
-      var occ2 = occluded(bez(t1), prisms, B);
+      var occ2 = occluded(bez(t1), occGrid, B);
       var dd = (q0.z + q1.z) / 2;
       var colp = mixCanvas(color, fog(dd) * 0.5);
       var ap = Math.min(1, alpha * (occ2 ? 0.55 : 1.9) * (1 - pj * 0.19));
@@ -2582,7 +2560,22 @@ function drawFloor(B){
     if(state.model.floorR && state.model.floorR > FR) FR = state.model.floorR;
   }
   var span = Math.ceil(FR * 0.92 / 8) * 8;
-  if(state.showGrid){
+  if(state.showGrid && window.Path2D){
+    /* 批量绘制：按透明度分 3 桶，stroke 从 100+ 次降到 3 次（报告 A7/方案4A） */
+    var bk = [new Path2D(), new Path2D(), new Path2D()];
+    for(k = -span; k <= span; k += 8){
+      a1 = project({ x:fcx - span, y:0, z:fcz + k }, B); b1 = project({ x:fcx + span, y:0, z:fcz + k }, B);
+      a2 = project({ x:fcx + k, y:0, z:fcz - span }, B); b2 = project({ x:fcx + k, y:0, z:fcz + span }, B);
+      alpha = 0.16 * (1 - Math.abs(k) / (span * 1.4));
+      var bi = alpha > 0.11 ? 0 : (alpha > 0.06 ? 1 : 2);
+      bk[bi].moveTo(a1.x, a1.y); bk[bi].lineTo(b1.x, b1.y);
+      bk[bi].moveTo(a2.x, a2.y); bk[bi].lineTo(b2.x, b2.y);
+    }
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(51,65,76,0.15)'; ctx.stroke(bk[0]);
+    ctx.strokeStyle = 'rgba(51,65,76,0.09)'; ctx.stroke(bk[1]);
+    ctx.strokeStyle = 'rgba(51,65,76,0.04)'; ctx.stroke(bk[2]);
+  } else if(state.showGrid){
     for(k = -span; k <= span; k += 8){
       a1 = project({ x:fcx - span, y:0, z:fcz + k }, B); b1 = project({ x:fcx + span, y:0, z:fcz + k }, B);
       a2 = project({ x:fcx + k, y:0, z:fcz - span }, B); b2 = project({ x:fcx + k, y:0, z:fcz + span }, B);
@@ -2640,6 +2633,7 @@ function drawScene(now){
     var off = (state.lod.rangeMode !== 'all') &&
       (cp.z <= 1 || cp.x < -margin || cp.x > W + margin || cp.y < -margin || cp.y > H + margin);
     f._sizePx = off ? 0 : sizePx;
+    f._off = off;
     if(off) continue;
 
     var isSel = state.selected && state.selected.fileId === f.id;
@@ -2708,17 +2702,30 @@ function drawScene(now){
     }
   }
 
+  /* 棱柱空间哈希：occluded 每次采样 O(1) 命中（原来每采样线性扫全部棱柱） */
+  var occGrid = {};
+  for(i = 0; i < prisms.length; i++){
+    var pf2 = prisms[i];
+    var gx0 = Math.floor((pf2.x - pf2.half) / 32), gx1 = Math.floor((pf2.x + pf2.half) / 32);
+    var gz0 = Math.floor((pf2.z - pf2.half) / 32), gz1 = Math.floor((pf2.z + pf2.half) / 32);
+    for(var gxi = gx0; gxi <= gx1; gxi++){
+      for(var gzi = gz0; gzi <= gz1; gzi++){
+        var gk = (gxi + 1024) * 2048 + (gzi + 1024);
+        var gl2 = occGrid[gk];
+        if(!gl2) gl2 = occGrid[gk] = [];
+        gl2.push(pf2);
+      }
+    }
+  }
+
   if(state.filters.includes){
     for(i = 0; i < model.fileEdges.length; i++){
       var fe = model.fileEdges[i];
-      var FA = null, FB = null, q;
-      for(q = 0; q < model.files.length; q++){
-        if(model.files[q].id === fe.from) FA = model.files[q];
-        if(model.files[q].id === fe.to) FB = model.files[q];
-      }
+      var FA = model.fileById[fe.from], FB = model.fileById[fe.to];
       if(!FA || !FB) continue;
       /* 文件块被阈值隐藏 → 其 include 联系线同样不显示 */
       if(!fileVisibleByThreshold(FA) || !fileVisibleByThreshold(FB)) continue;
+      if(FA._off || FB._off) continue; /* 端点文件被裁剪时连线没有落点 */
       var fd = (state.selected && state.selected.fileId !== FA.id && state.selected.fileId !== FB.id) ? 0.4 : 1;
       pushLink(list, B, { x:FA.x, z:FA.z }, { x:FB.x, z:FB.z }, C_BLUE, 0.22 * fd, i * 0.13);
     }
@@ -2730,6 +2737,9 @@ function drawScene(now){
       var e = model.edges[i];
       var sA = model.symById[e.from], sB = model.symById[e.to];
       if(!sA || !sB || !passesThreshold(sA) || !passesThreshold(sB)) continue;
+      /* 端点所在文件被渲染范围裁剪 → 连线两端没有可见落点，跳过（省大量采样） */
+      var fa1 = model.fileById[sA.fileId], fb1 = model.fileById[sB.fileId];
+      if((fa1 && fa1._off) || (fb1 && fb1._off)) continue;
       var pa = symAnchor(sA), pb = symAnchor(sB);
       if(!pa || !pb) continue;
       var sel = state.selected && (state.selected.symId === e.from || state.selected.symId === e.to);
@@ -2738,7 +2748,7 @@ function drawScene(now){
       var alpha = state.selected ? (sel ? 0.42 : 0.07) : 0.16; /* 调用线整体调淡 */
       /* 入场动画结束后全部画满：避免大项目的后段调用线永远只有“头”没有“尾” */
       var stag = (reduced || pathT >= 1) ? 1 : clamp(pathT * 1.4 - i * 0.012, 0, 1);
-      pushFilament(list, B, pa, pb, base, alpha, prisms, stag, sel || hov, i * 0.061);
+      pushFilament(list, B, pa, pb, base, alpha, occGrid, stag, sel || hov, i * 0.061);
     }
   }
 
@@ -2798,7 +2808,7 @@ function drawScene(now){
     var lastY = -1e9, lastX0 = -1e9, lastX1 = -1e9;
     for(i = 0; i < dlabels.length; i++){
       var dl = dlabels[i];
-      var dw = ctx.measureText(dl.t).width;
+      var dw = measureTw(dl.t, '500 10px "IBM Plex Mono", Consolas, monospace');
       var dy2 = dl.y;
       if(dl.y - lastY < 13 && dl.x < lastX1 + 6 && dl.x + dw > lastX0 - 6){ dy2 = lastY + 13; }
       lastY = dy2; lastX0 = dl.x; lastX1 = dl.x + dw;
@@ -2855,11 +2865,16 @@ function drawScene(now){
 }
 
 /* ---------- 7. 视图渲染 ---------- */
+var bindCache = {};
 function setB(key, val){
-  var nodes = $all('[data-b="' + key + '"]');
+  /* data-b 节点全部静态存在于 HTML：缓存查询结果，避免 renderMetrics 14 次全 DOM 扫描（报告 E1） */
+  var nodes = bindCache[key];
+  if(!nodes) nodes = bindCache[key] = $all('[data-b="' + key + '"]');
   for(var i = 0; i < nodes.length; i++){
-    nodes[i].textContent = val;
-    if(nodes[i].setAttribute) nodes[i].setAttribute('title', val);
+    if(nodes[i].textContent !== val){
+      nodes[i].textContent = val;
+      if(nodes[i].setAttribute) nodes[i].setAttribute('title', val);
+    }
   }
 }
 
@@ -3378,7 +3393,7 @@ function hitTest(mx, my){
       if((lf._sizePx || 0) < labelMin) continue;
       var lp = project({ x:lf.x, y:0, z:lf.z + lf.half + 1.2 }, B);
       var txt = clip(lf.name, 20);
-      var tw = ctx.measureText(txt).width;
+      var tw = measureTw(txt, '500 11px "IBM Plex Mono", Consolas, monospace');
       if(mx >= lp.x + 4 && mx <= lp.x + 4 + tw && my >= lp.y - 11 && my <= lp.y + 3){
         return { kind:'file', fileId:lf.id, symId:null, file:lf, cx:lp.x, cy:lp.y };
       }
@@ -3462,9 +3477,21 @@ function hitTest(mx, my){
   return best;
 }
 
+var lastTipKey = '';
 function showTooltip(hit){
   var tip = $('#tooltip');
   if(!tip) return;
+  var key = hit ? (hit.kind + '|' + (hit.symId || hit.fileId || '')) : '';
+  /* 命中对象没变时只挪位置、不重建 innerHTML（报告 C3） */
+  if(key === lastTipKey){
+    if(hit && tip.className === 'on'){
+      var r1 = sceneEl.getBoundingClientRect();
+      tip.style.left = clamp(hit.cx + 18, 8, Math.max(8, r1.width - 240)) + 'px';
+      tip.style.top = clamp(hit.cy - 12, 8, Math.max(8, r1.height - 120)) + 'px';
+    }
+    return;
+  }
+  lastTipKey = key;
   if(!hit){ tip.className = ''; return; }
   var m = state.model, f = null, i;
   for(i = 0; i < m.files.length; i++){ if(m.files[i].id === hit.fileId){ f = m.files[i]; break; } }
@@ -3579,6 +3606,7 @@ function toggleFold(){
 
 function bindUI(){
   var activePointers = {};
+  var hoverRaf = 0, hoverX = 0, hoverY = 0;
   function pointerCount(){
     var n = 0, pid;
     for(pid in activePointers){ if(activePointers.hasOwnProperty(pid)) n++; }
@@ -3618,13 +3646,20 @@ function bindUI(){
       showTooltip(null);
       return;
     }
-    var hit = hitTest(mx, my);
-    state.hover = hit;
-    /* 提示框锚定光标而非实体中心：中心锚点的偏差 = 点击处到中心的距离，
-       随缩放（实体屏幕尺寸）与窗口（焦距）放大，表现为“光标比实体位置偏上” */
-    if(hit){ hit.cx = mx; hit.cy = my; }
-    showTooltip(hit);
-    sceneCanvas.style.cursor = hit ? 'pointer' : (state.panMode ? 'move' : 'grab');
+    /* hitTest 与渲染同帧合并：高采样率鼠标/触控板不再每事件全量命中（报告 C1/C2） */
+    hoverX = mx; hoverY = my;
+    if(hoverRaf) return;
+    hoverRaf = requestAnimationFrame(function(){
+      hoverRaf = 0;
+      if(state.drag) return;
+      var hit = hitTest(hoverX, hoverY);
+      state.hover = hit;
+      /* 提示框锚定光标而非实体中心（避免随缩放放大的中心偏差） */
+      if(hit){ hit.cx = hoverX; hit.cy = hoverY; }
+      showTooltip(hit);
+      sceneCanvas.style.cursor = hit ? 'pointer' : (state.panMode ? 'move' : 'grab');
+      invalidate(); /* 命中结果在帧后更新，补一帧让悬停高亮跟上 */
+    });
   });
   on(sceneCanvas, 'pointerup', function(e){
     delete activePointers[e.pointerId];
@@ -3696,21 +3731,16 @@ function bindUI(){
       var dims = exportDims();
       state.exporting = true; /* 导出期间关闭流动动画，避免干扰 */
       flashStatus('正在渲染快照 ' + dims.w + '×' + dims.h + '…', 4000);
-      var finish = function(url){
+      var finish = function(cv){
         state.exporting = false;
-        if(!url){ report('导出快照', '渲染失败'); return; }
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = (state.projectName || 'scene') + '-syntax-graph-' + dims.w + 'x' + dims.h + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        if(!cv){ report('导出快照', '渲染失败'); return; }
+        downloadCanvas(cv, (state.projectName || 'scene') + '-syntax-graph-' + dims.w + 'x' + dims.h + '.png');
         flashStatus('已导出快照 ' + dims.w + '×' + dims.h, 1400);
       };
       if(dims.w * dims.h > 1200000){
-        exportRenderParallel(dims, function(url){
-          if(!url){ try { url = exportRenderMain(dims); } catch(e2){ report('导出快照', e2); url = null; } }
-          finish(url);
+        exportRenderParallel(dims, function(cv){
+          if(!cv){ try { cv = exportRenderMain(dims); } catch(e2){ report('导出快照', e2); cv = null; } }
+          finish(cv);
         });
       } else {
         finish(exportRenderMain(dims));
@@ -3737,6 +3767,7 @@ function bindUI(){
     var v = parseFloat(this.value);
     state.callThreshold = (isFinite(v) && v > 0) ? Math.floor(v) : 0; /* 只支持整数 */
     this.value = String(state.callThreshold);
+    invalidateVis(); invalidate();
     flashStatus('调用阈值 ' + (state.callThreshold || '关闭'), 1000);
     safe('调用关系', renderChord);
     safe('符号表', renderFnTable);
@@ -4411,21 +4442,36 @@ function exportSection(id){
     c2.fillStyle = '#07090B';
     c2.fillRect(0, 0, cv.width, cv.height);
     c2.drawImage(img, 0, 0, cv.width, cv.height);
-    var url;
-    try { url = cv.toDataURL('image/png'); } catch(e){ report('导出分区', e); return; }
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = (state.projectName || 'section') + '-' + id + '-' + cv.width + 'x' + cv.height + '.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadCanvas(cv, (state.projectName || 'section') + '-' + id + '-' + cv.width + 'x' + cv.height + '.png');
     flashStatus('已导出 ' + id + ' ' + cv.width + '×' + cv.height, 1400);
   };
   img.onerror = function(){ report('导出分区', new Error('分区渲染失败 ' + id)); };
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-/* 单线程导出：临时切换 ctx 到离屏画布，静态渲染（无流动动画） */
+/* toBlob 下载：避免大图 base64 字符串阻塞主线程（报告 F4/G4/方案8A） */
+function downloadCanvas(cv, name){
+  function trigger(url){
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+  if(cv.toBlob){
+    cv.toBlob(function(blob){
+      if(!blob){ try { trigger(cv.toDataURL('image/png')); } catch(e){ report('导出', e); } return; }
+      var url = URL.createObjectURL(blob);
+      trigger(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    }, 'image/png');
+  } else {
+    try { trigger(cv.toDataURL('image/png')); } catch(e){ report('导出', e); }
+  }
+}
+
+/* 单线程导出：临时切换 ctx 到离屏画布，静态渲染（无流动动画）；返回 canvas */
 function exportRenderMain(dims){
   var oldCtx = ctx, oldW = W, oldH = H;
   var oldExporting = state.exporting, oldFlowT = state.flowT, oldSelStart = state.selectStart;
@@ -4437,7 +4483,7 @@ function exportRenderMain(dims){
   drawScene(state.sceneStart + 6000);
   ctx = oldCtx; W = oldW; H = oldH;
   state.exporting = oldExporting; state.flowT = oldFlowT; state.selectStart = oldSelStart;
-  return cv.toDataURL('image/png');
+  return cv;
 }
 
 /* 多线程导出：按行分块给 Worker 并行渲染，主线程拼合；失败回退单线程 */
@@ -4469,8 +4515,9 @@ function exportRenderParallel(dims, done){
         var m = e.data || {};
         if(m.error || !m.bitmap){ fail(); return; }
         octx.drawImage(m.bitmap, 0, m.y);
+        if(m.bitmap.close) m.bitmap.close(); /* 立即释放显存（报告 F3） */
         try { wk.terminate(); } catch(e2){}
-        if(--left <= 0) done(out.toDataURL('image/png'));
+        if(--left <= 0) done(out);
       };
       wk.onerror = function(){ fail(); };
       wk.postMessage({
@@ -4486,6 +4533,14 @@ function exportRenderParallel(dims, done){
 
 /* ---------- 10. 启动 ---------- */
 function loadModel(raws, name, root, done){
+  /* raws 可能为 null：重复点击「开始分析」或并发导入时，先完成的那次 finish
+     会释放 pendingRaw，后到的调用拿到 null —— 这里直接拦下而不是抛错 */
+  if(!raws){
+    report('解析', '没有可分析的源文件（清单可能被重复点击清空）');
+    setProgress('源码清单为空：请重新点击「开始分析」');
+    updateAnalyzeState();
+    return;
+  }
   function finish(model){
     try {
       if(!model || !model.files.length){
@@ -4507,6 +4562,8 @@ function loadModel(raws, name, root, done){
         if(defTh < 0) defTh = 0;
       }
       state.callThreshold = defTh;
+      invalidateVis(); invalidate();
+      lastTipKey = ''; /* 新模型后 id 可能复用，强制重建提示内容 */
       var thIn = $('#opt-threshold');
       if(thIn) thIn.value = defTh ? String(defTh) : '0';
       var thNote = $('#threshold-note');
@@ -4515,6 +4572,7 @@ function loadModel(raws, name, root, done){
           ('默认 ⌊log4(' + model.totals.functions + ' 个函数)⌋ = ' + defTh + ' · 调用次数低于阈值则隐藏') :
           '函数太少（<4），阈值默认关闭';
       }
+      if(state.pendingRaw === raws) state.pendingRaw = null; /* 只释放自己这一份；并发导入时不动后到的清单 */
       resetCamera();
       renderAll();
       if(done) done(model);
@@ -4540,7 +4598,27 @@ function loadModel(raws, name, root, done){
   });
 }
 
-var rafId = 0, lastFrame = nowMs();
+var rafId = 0, lastFrame = nowMs(), lastReadoutAt = 0, lastCoordTxt = '';
+/* 读数 10Hz 节流 + 变化才写 DOM（报告 A10/方案7B） */
+function updateReadouts(now){
+  if(now - lastReadoutAt < 100) return;
+  lastReadoutAt = now;
+  var c = state.cam;
+  function fmt(v){ return (v < 0 ? '-' : '') + padLeft(Math.abs(v).toFixed(2), 6); }
+  var coord = $('#coord-readout');
+  if(coord){
+    var cdist = c.dist / Math.max(c.zoom, 0.01); /* 与 camBasis 一致：缩放只推拉距离 */
+    var txt = 'X ' + fmt(c.tx + cdist * Math.cos(c.pitch) * Math.sin(c.yaw)) +
+      ' / Y ' + fmt(c.ty + cdist * Math.sin(c.pitch)) +
+      ' / Z ' + fmt(c.tz + cdist * Math.cos(c.pitch) * Math.cos(c.yaw));
+    if(txt !== lastCoordTxt){ lastCoordTxt = txt; coord.textContent = txt; }
+  }
+  var zlEl = $('#zoom-readout');
+  if(zlEl){
+    var zlTxt = 'ZL-' + pad2(zoomLevel()) + ' · ' + (c.zoom >= 1 ? c.zoom.toFixed(2) : c.zoom.toFixed(3)) + '×';
+    if(zlEl.textContent !== zlTxt) zlEl.textContent = zlTxt;
+  }
+}
 function loop(now){
   rafId = requestAnimationFrame(loop);
   try {
@@ -4557,30 +4635,20 @@ function loop(now){
       }
     }
 
-    var t0 = nowMs();
-    drawScene(now);
-    var cost = nowMs() - t0;
-    if(cost > 24){ state.slowFrames++; } else { state.slowFrames = 0; }
-    if(state.slowFrames > 10 && state.density === 1){
-      state.density = 0.5;
-      var note = $('#density-note');
-      if(note) note.textContent = '场景密度：已自动降低';
+    /* 空闲跳帧：无输入、无动画、无流动时不重绘（报告 A1/方案2A） */
+    if(needsFrame(now)){
+      needRedraw = false;
+      var t0 = nowMs();
+      drawScene(now);
+      var cost = nowMs() - t0;
+      if(cost > 24){ state.slowFrames++; } else { state.slowFrames = 0; }
+      if(state.slowFrames > 10 && state.density === 1){
+        state.density = 0.5;
+        var note = $('#density-note');
+        if(note) note.textContent = '场景密度：已自动降低';
+      }
     }
-
-    var c = state.cam;
-    function fmt(v){ return (v < 0 ? '-' : '') + padLeft(Math.abs(v).toFixed(2), 6); }
-    var coord = $('#coord-readout');
-    if(coord){
-      var cdist = c.dist / Math.max(c.zoom, 0.01); /* 与 camBasis 一致：缩放只推拉距离 */
-      coord.textContent = 'X ' + fmt(c.tx + cdist * Math.cos(c.pitch) * Math.sin(c.yaw)) +
-        ' / Y ' + fmt(c.ty + cdist * Math.sin(c.pitch)) +
-        ' / Z ' + fmt(c.tz + cdist * Math.cos(c.pitch) * Math.cos(c.yaw));
-    }
-    var zlEl = $('#zoom-readout');
-    if(zlEl){
-      var zlTxt = 'ZL-' + pad2(zoomLevel()) + ' · ' + (c.zoom >= 1 ? c.zoom.toFixed(2) : c.zoom.toFixed(3)) + '×';
-      if(zlEl.textContent !== zlTxt) zlEl.textContent = zlTxt;
-    }
+    updateReadouts(now);
     lastFrame = now;
   } catch(err){
     report('三维渲染', err);
@@ -4597,6 +4665,10 @@ function boot(){
   safe('UI 事件绑定', bindUI);
   safe('网格', drawGrid);
   safe('画布', resizeScene);
+  if(window.ResizeObserver && sceneEl){
+    sceneRO = new ResizeObserver(function(){ safe('画布', resizeScene); invalidate(); });
+    sceneRO.observe(sceneEl);
+  }
   safe('解析示例项目', function(){
     loadModel(demoRaw(), 'atlas', './atlas', function(){
       flashStatus('已解析示例项目 atlas', 1600);
